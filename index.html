@@ -33,6 +33,7 @@
     --imovel:#cfa94f;
     --veic:#9fbf7f;
     --fin:#7fb0c9;
+    --outro:#c9a0c9;
   }
   *{box-sizing:border-box;}
   body{
@@ -59,16 +60,24 @@
   .total-delta{font-size:13px;margin-top:6px;color:var(--cream-dim);}
   .total-delta .up{color:var(--up);}
   .total-delta .down{color:var(--down);}
-  .total-sub{display:flex;justify-content:center;gap:18px;margin-top:12px;font-size:12px;color:var(--cream-dim);flex-wrap:wrap;}
+  .total-sub{display:flex;justify-content:center;gap:16px;margin-top:12px;font-size:12px;color:var(--cream-dim);flex-wrap:wrap;}
   .total-sub b{color:var(--cream);font-weight:600;}
 
+  .busca-box{margin-bottom:14px;}
+  .busca-box input{
+    width:100%;background:var(--card);border:1px solid var(--line);border-radius:12px;
+    color:var(--cream);font-family:inherit;font-size:14px;padding:12px 14px;
+  }
+  .busca-box input:focus{outline:none;border-color:var(--gold-dim);}
+
   .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px;}
-  .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap;}
   .panel-head h2{font-size:16px;}
   .panel-head h2 .tag{font-size:11px;color:var(--cream-dim);font-family:'Inter',sans-serif;font-weight:500;margin-left:8px;}
   .h-imovel{color:var(--imovel);}
   .h-veic{color:var(--veic);}
   .h-fin{color:var(--fin);}
+  .h-outro{color:var(--outro);}
 
   button{
     font-family:'Inter',sans-serif;font-weight:600;font-size:13px;
@@ -79,9 +88,11 @@
   .btn-primary{background:var(--gold);color:#122019;border-color:var(--gold);}
   .btn-veic{background:var(--veic);color:#122019;border-color:var(--veic);}
   .btn-fin{background:var(--fin);color:#122019;border-color:var(--fin);}
+  .btn-outro{background:var(--outro);color:#122019;border-color:var(--outro);}
   .btn-secondary{background:var(--card-2);color:var(--cream);}
   .btn-danger{background:transparent;color:var(--danger);border-color:var(--danger);}
   button.small{padding:6px 10px;font-size:12px;}
+  button:disabled{opacity:.5;cursor:wait;}
 
   details.item{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:var(--card-2);overflow:hidden;}
   details.item summary{
@@ -123,6 +134,12 @@
   .anexo-vazio{color:var(--cream-dim);font-size:12px;font-style:italic;padding:2px 0 6px;}
   .anexo-thumb{width:34px;height:34px;border-radius:6px;object-fit:cover;flex-shrink:0;}
 
+  /* extratos mensais */
+  .extrato-add{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;}
+  .extrato-add input[type=month]{flex:1;min-width:140px;}
+  .extrato-mes{margin-bottom:8px;}
+  .extrato-mes-titulo{font-size:12px;font-weight:600;color:var(--fin);margin:6px 0 4px;}
+
   .donut-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
   .chart-box svg{width:100%;height:auto;display:block;}
   .legend{flex:1;min-width:190px;}
@@ -146,7 +163,7 @@
   <header>
     <div class="eyebrow">Banco de dados dos seus bens</div>
     <h1>Patrimônio</h1>
-    <p>Imóveis, veículos e contas com todos os dados e documentos em um só lugar — salvo apenas neste aparelho.</p>
+    <p>Imóveis, veículos, contas, extratos e outros bens — dados e documentos salvos apenas neste aparelho.</p>
   </header>
 
   <div class="total-card">
@@ -154,11 +171,16 @@
     <div class="total-value" id="totalValue">R$ 0,00</div>
     <div class="total-delta" id="totalDelta"></div>
     <div class="total-sub">
-      <span>🏠 Imóveis <b id="subImoveis">R$ 0</b></span>
-      <span>🚗 Veículos <b id="subVeic">R$ 0</b></span>
-      <span>🏦 Financeiro <b id="subFin">R$ 0</b></span>
+      <span>🏠 <b id="subImoveis">R$ 0</b></span>
+      <span>🚗 <b id="subVeic">R$ 0</b></span>
+      <span>🏦 <b id="subFin">R$ 0</b></span>
+      <span>🖼️ <b id="subOutros">R$ 0</b></span>
       <span id="subAluguelWrap" style="display:none;">📄 Aluguéis/mês <b id="subAluguel">R$ 0</b></span>
     </div>
+  </div>
+
+  <div class="busca-box">
+    <input type="search" id="busca" placeholder="🔍 Buscar por nome, endereço, placa, categoria…">
   </div>
 
   <div class="panel">
@@ -189,6 +211,15 @@
   </div>
 
   <div class="panel">
+    <div class="panel-head">
+      <h2 class="h-outro">Outros bens <span class="tag" id="outrosCount"></span></h2>
+      <button class="btn-outro small" id="addOutroBtn">+ Bem</button>
+    </div>
+    <div id="outrosList"></div>
+    <div class="empty-hint" id="outrosEmpty">Obras de arte, joias, coleções, participações… Toque em “+ Bem”.</div>
+  </div>
+
+  <div class="panel">
     <div class="panel-head"><h2 style="color:var(--gold);">Divisão do patrimônio</h2></div>
     <div class="donut-row">
       <div class="chart-box" style="max-width:200px;"><svg id="donutSvg" viewBox="0 0 200 200"></svg></div>
@@ -205,13 +236,13 @@
 
   <div class="controls-row" style="justify-content:center;">
     <button class="btn-secondary small" id="exportBtn">⤓ Exportar CSV</button>
-    <button class="btn-secondary small" id="backupBtn">⤓ Backup completo</button>
+    <button class="btn-secondary small" id="backupBtn">⤓ Backup ZIP (dados + arquivos)</button>
     <button class="btn-danger small" id="wipeBtn">Apagar tudo</button>
   </div>
 
   <footer>
-    Dados e arquivos ficam salvos apenas neste aparelho — nada é enviado para a internet.<br>
-    Anexe fotos, escrituras, contratos e notas fiscais direto nas fichas de cada bem.
+    Dados e arquivos ficam no banco interno do navegador (IndexedDB) — comporta uma base grande e nada é enviado para a internet.<br>
+    Faça o backup ZIP de tempos em tempos: ele contém todos os dados e todos os arquivos anexados.
   </footer>
 </div>
 
@@ -219,11 +250,7 @@
 (function(){
   "use strict";
 
-  const K_IMOVEIS='patrimonio_imoveis_v1';
-  const K_VEIC='patrimonio_veic_v1';
-  const K_FIN='patrimonio_fin_v1';
-  const K_HIST='patrimonio_hist_v1';
-  const MAX_ARQ=25*1024*1024; // 25 MB por arquivo
+  const MAX_ARQ=50*1024*1024; // 50 MB por arquivo
 
   const FIN_TIPOS=[
     {id:'conta',nome:'Conta corrente'},
@@ -233,26 +260,31 @@
     {id:'outro',nome:'Outro'},
   ];
   const FIN_CORES={conta:'#7fb0c9',poupanca:'#8ab4a8',investimento:'#9a8fc9',previdencia:'#c97b63',outro:'#c9c15f'};
+  const PALETA=['#c9a0c9','#c9c15f','#7fca8f','#c9739e','#a3a3c9','#c98f4a','#8ab4a8','#9a8fc9'];
 
-  let imoveis=[], veic=[], fin=[], hist=[];
+  let imoveis=[], veic=[], fin=[], outros=[], hist=[];
   const aberto=new Set();
+  let filtro='';
 
   const $=id=>document.getElementById(id);
   const els={
     totalValue:$('totalValue'),totalDelta:$('totalDelta'),
-    subImoveis:$('subImoveis'),subVeic:$('subVeic'),subFin:$('subFin'),
+    subImoveis:$('subImoveis'),subVeic:$('subVeic'),subFin:$('subFin'),subOutros:$('subOutros'),
     subAluguel:$('subAluguel'),subAluguelWrap:$('subAluguelWrap'),
     imoveisList:$('imoveisList'),imoveisEmpty:$('imoveisEmpty'),imoveisCount:$('imoveisCount'),
     veicList:$('veicList'),veicEmpty:$('veicEmpty'),veicCount:$('veicCount'),
     finList:$('finList'),finEmpty:$('finEmpty'),finCount:$('finCount'),
+    outrosList:$('outrosList'),outrosEmpty:$('outrosEmpty'),outrosCount:$('outrosCount'),
     donutSvg:$('donutSvg'),donutEmpty:$('donutEmpty'),catLegend:$('catLegend'),
     lineSvg:$('lineSvg'),lineEmpty:$('lineEmpty'),
+    busca:$('busca'),
   };
 
   // ---------- helpers ----------
   const fmtBRL=v=>v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
   const fmtNum=v=>v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
   const fmtDate=iso=>{if(!iso)return'';const[y,m,d]=iso.split('-');return d+'/'+m+'/'+y.slice(2);};
+  const fmtMes=ym=>{if(!ym)return'';const[y,m]=ym.split('-');return m+'/'+y;};
   const hoje=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
   const uid=p=>p+Date.now().toString(36)+Math.floor(Math.random()*1e5).toString(36);
   const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -261,7 +293,6 @@
     if(b>=1024)return Math.round(b/1024)+' KB';
     return b+' B';
   };
-
   function parseValor(str){
     if(typeof str!=='string')return NaN;
     str=str.trim().replace(/R\$\s?/,'');
@@ -271,92 +302,116 @@
     return parseFloat(str);
   }
 
-  // ---------- IndexedDB para arquivos ----------
+  // ---------- IndexedDB: dados + arquivos ----------
   let db=null;
   function abrirDB(){
     return new Promise((res)=>{
       if(!window.indexedDB){res(null);return;}
-      const rq=indexedDB.open('patrimonio_db',1);
-      rq.onupgradeneeded=()=>{rq.result.createObjectStore('arquivos');};
+      const rq=indexedDB.open('patrimonio_db',2);
+      rq.onupgradeneeded=()=>{
+        const d=rq.result;
+        if(!d.objectStoreNames.contains('arquivos'))d.createObjectStore('arquivos');
+        if(!d.objectStoreNames.contains('dados'))d.createObjectStore('dados');
+      };
       rq.onsuccess=()=>{db=rq.result;res(db);};
       rq.onerror=()=>res(null);
     });
   }
-  function salvarArquivo(id,blob){
+  function idbPut(store,key,val){
     return new Promise((res,rej)=>{
       if(!db){rej(new Error('sem banco'));return;}
-      const tx=db.transaction('arquivos','readwrite');
-      tx.objectStore('arquivos').put(blob,id);
-      tx.oncomplete=()=>res();
-      tx.onerror=()=>rej(tx.error);
+      const tx=db.transaction(store,'readwrite');
+      tx.objectStore(store).put(val,key);
+      tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);
     });
   }
-  function lerArquivo(id){
+  function idbGet(store,key){
     return new Promise((res)=>{
       if(!db){res(null);return;}
-      const rq=db.transaction('arquivos').objectStore('arquivos').get(id);
-      rq.onsuccess=()=>res(rq.result||null);
+      const rq=db.transaction(store).objectStore(store).get(key);
+      rq.onsuccess=()=>res(rq.result===undefined?null:rq.result);
       rq.onerror=()=>res(null);
     });
   }
-  function apagarArquivo(id){
+  function idbDel(store,key){
     return new Promise((res)=>{
       if(!db){res();return;}
-      const tx=db.transaction('arquivos','readwrite');
-      tx.objectStore('arquivos').delete(id);
-      tx.oncomplete=()=>res();
-      tx.onerror=()=>res();
+      const tx=db.transaction(store,'readwrite');
+      tx.objectStore(store).delete(key);
+      tx.oncomplete=()=>res();tx.onerror=()=>res();
     });
   }
-  function limparArquivos(){
+  function idbClear(store){
     return new Promise((res)=>{
       if(!db){res();return;}
-      const tx=db.transaction('arquivos','readwrite');
-      tx.objectStore('arquivos').clear();
-      tx.oncomplete=()=>res();
-      tx.onerror=()=>res();
+      const tx=db.transaction(store,'readwrite');
+      tx.objectStore(store).clear();
+      tx.oncomplete=()=>res();tx.onerror=()=>res();
     });
   }
+  const salvarArquivo=(id,blob)=>idbPut('arquivos',id,blob);
+  const lerArquivo=id=>idbGet('arquivos',id);
+  const apagarArquivo=id=>idbDel('arquivos',id);
 
   function save(){
-    try{
-      localStorage.setItem(K_IMOVEIS,JSON.stringify(imoveis));
-      localStorage.setItem(K_VEIC,JSON.stringify(veic));
-      localStorage.setItem(K_FIN,JSON.stringify(fin));
-      localStorage.setItem(K_HIST,JSON.stringify(hist));
-    }catch(e){}
+    const estado={imoveis,veic,fin,outros,hist,salvoEm:new Date().toISOString()};
+    idbPut('dados','estado',estado).catch(()=>{});
+    // espelho leve do histórico (recuperação de emergência)
+    try{localStorage.setItem('patrimonio_hist_v1',JSON.stringify(hist));}catch(e){}
   }
-  function load(){
+
+  async function load(){
+    const estado=await idbGet('dados','estado');
+    if(estado){
+      imoveis=estado.imoveis||[];veic=estado.veic||[];
+      fin=estado.fin||[];outros=estado.outros||[];hist=estado.hist||[];
+      return;
+    }
+    // migração da versão anterior (localStorage)
     try{
-      imoveis=JSON.parse(localStorage.getItem(K_IMOVEIS)||'[]')||[];
-      veic=JSON.parse(localStorage.getItem(K_VEIC)||'[]')||[];
-      fin=JSON.parse(localStorage.getItem(K_FIN)||'[]')||[];
-      hist=JSON.parse(localStorage.getItem(K_HIST)||'[]')||[];
-    }catch(e){imoveis=[];veic=[];fin=[];hist=[];}
+      imoveis=JSON.parse(localStorage.getItem('patrimonio_imoveis_v1')||'[]')||[];
+      veic=JSON.parse(localStorage.getItem('patrimonio_veic_v1')||'[]')||[];
+      fin=JSON.parse(localStorage.getItem('patrimonio_fin_v1')||'[]')||[];
+      hist=JSON.parse(localStorage.getItem('patrimonio_hist_v1')||'[]')||[];
+      outros=[];
+    }catch(e){imoveis=[];veic=[];fin=[];outros=[];hist=[];}
     if(imoveis.length===0&&veic.length===0&&fin.length===0&&hist.length===0){
       fin=[
-        {id:uid('f'),nome:'UBP',tipo:'investimento',valor:0,notas:'',anexos:{},atualizado:hoje()},
-        {id:uid('f'),nome:'Santander',tipo:'conta',valor:0,notas:'',anexos:{},atualizado:hoje()},
-        {id:uid('f'),nome:'Bradesco Previdência',tipo:'previdencia',valor:0,notas:'',anexos:{},atualizado:hoje()},
-        {id:uid('f'),nome:'Bradesco contas',tipo:'conta',valor:0,notas:'',anexos:{},atualizado:hoje()},
+        {id:uid('f'),nome:'UBP',tipo:'investimento',valor:0,notas:'',anexos:{},extratos:[],atualizado:hoje()},
+        {id:uid('f'),nome:'Santander',tipo:'conta',valor:0,notas:'',anexos:{},extratos:[],atualizado:hoje()},
+        {id:uid('f'),nome:'Bradesco Previdência',tipo:'previdencia',valor:0,notas:'',anexos:{},extratos:[],atualizado:hoje()},
+        {id:uid('f'),nome:'Bradesco contas',tipo:'conta',valor:0,notas:'',anexos:{},extratos:[],atualizado:hoje()},
       ];
     }
+    save();
   }
 
   const totImoveis=()=>imoveis.reduce((a,b)=>a+(b.valor||0),0);
   const totVeic=()=>veic.reduce((a,b)=>a+(b.valor||0),0);
   const totFin=()=>fin.reduce((a,b)=>a+(b.valor||0),0);
-  const total=()=>totImoveis()+totVeic()+totFin();
+  const totOutros=()=>outros.reduce((a,b)=>a+(b.valor||0),0);
+  const total=()=>totImoveis()+totVeic()+totFin()+totOutros();
   const totAluguel=()=>imoveis.filter(i=>i.alugado).reduce((a,b)=>a+(b.aluguelValor||0),0);
 
   function snapshot(){
     const dia=hoje();
-    const ponto={dia,total:total(),imoveis:totImoveis(),veiculos:totVeic(),financeiro:totFin()};
+    const ponto={dia,total:total(),imoveis:totImoveis(),veiculos:totVeic(),financeiro:totFin(),outros:totOutros()};
     const idx=hist.findIndex(h=>h.dia===dia);
     if(idx>=0)hist[idx]=ponto;else hist.push(ponto);
     hist.sort((a,b)=>a.dia<b.dia?-1:1);
     save();
   }
+
+  // ---------- busca ----------
+  function combina(textos){
+    if(!filtro)return true;
+    const alvo=textos.filter(Boolean).join(' ').toLowerCase();
+    return filtro.split(/\s+/).every(p=>alvo.includes(p));
+  }
+  els.busca.addEventListener('input',()=>{
+    filtro=els.busca.value.trim().toLowerCase();
+    renderImoveis();renderVeic();renderFin();renderOutros();
+  });
 
   // ---------- totais ----------
   function renderTotal(){
@@ -365,6 +420,7 @@
     els.subImoveis.textContent=fmtBRL(totImoveis());
     els.subVeic.textContent=fmtBRL(totVeic());
     els.subFin.textContent=fmtBRL(totFin());
+    els.subOutros.textContent=fmtBRL(totOutros());
     const alug=totAluguel();
     els.subAluguelWrap.style.display=alug>0?'inline':'none';
     els.subAluguel.textContent=fmtBRL(alug);
@@ -387,7 +443,6 @@
       return '<div class="'+cls+'"><label>'+label+'</label><input type="date" data-k="'+k+'" value="'+esc(val||'')+'"></div>';
     return '<div class="'+cls+'"><label>'+label+'</label><input type="text" data-k="'+k+'" value="'+esc(val||'')+'"></div>';
   }
-
   function anexosZone(secao,rotulo){
     return '<div class="field wide" data-anexos="'+secao+'"><label>'+rotulo+'</label>'+
       '<div class="anexo-list"></div>'+
@@ -483,11 +538,12 @@
     d.className='item';d.dataset.id=fc.id;
     if(aberto.has(fc.id))d.open=true;
     const tipoNome=(FIN_TIPOS.find(t=>t.id===fc.tipo)||FIN_TIPOS[0]).nome;
+    const nExtratos=(fc.extratos||[]).length;
     d.innerHTML=
       '<summary>'+
         '<span class="item-title"><span class="item-dot" style="background:'+(FIN_CORES[fc.tipo]||'#7fb0c9')+'"></span>'+
           '<span><span class="item-name">'+esc(fc.nome||'Conta')+'</span>'+
-          '<div class="item-sub">'+tipoNome+' · atualizado '+fmtDate(fc.atualizado)+'</div>'+
+          '<div class="item-sub">'+tipoNome+(nExtratos?' · '+nExtratos+' extrato'+(nExtratos>1?'s':''):'')+' · atualizado '+fmtDate(fc.atualizado)+'</div>'+
         '</span></span>'+
         '<span><span class="item-value">'+fmtBRL(fc.valor||0)+'</span><span class="chev">▶</span></span>'+
       '</summary>'+
@@ -497,11 +553,55 @@
           FIN_TIPOS.map(t=>'<option value="'+t.id+'"'+(fc.tipo===t.id?' selected':'')+'>'+t.nome+'</option>').join('')+
         '</select></div>'+
         f('valor','valor','Saldo / valor atual (R$)',fmtNum(fc.valor||0))+
+        '<div class="subsection" style="color:var(--fin);">Extratos mensais</div>'+
+        '<div class="field wide">'+
+          '<label>Adicionar extrato do mês</label>'+
+          '<div class="extrato-add">'+
+            '<input type="month" data-extrato-mes>'+
+            '<button type="button" class="btn-secondary small" data-extrato-add>📎 Anexar extrato</button>'+
+            '<input type="file" multiple style="display:none" data-extrato-file>'+
+          '</div>'+
+          '<div class="extrato-list"></div>'+
+        '</div>'+
+        '<div class="subsection">Notas e arquivos</div>'+
         '<div class="field wide"><label>Notas (agência, nº conta, corretora…)</label><textarea data-k="notas">'+esc(fc.notas)+'</textarea></div>'+
-        anexosZone('notas','Arquivos (extratos, comprovantes…)')+
+        anexosZone('notas','Outros arquivos (contratos, comprovantes…)')+
       '</div>'+
       '<div class="item-actions"><button class="btn-danger small" data-del>remover conta</button></div></div>';
     ligarCampos(d,fc,'fin');
+    wireExtratos(d,fc);
+    return d;
+  }
+
+  function outroCard(o){
+    const d=document.createElement('details');
+    d.className='item';d.dataset.id=o.id;
+    if(aberto.has(o.id))d.open=true;
+    d.innerHTML=
+      '<summary>'+
+        '<span class="item-title"><span class="item-dot" style="background:var(--outro)"></span>'+
+          '<span><span class="item-name">'+esc(o.nome||'Bem')+'</span>'+
+          '<div class="item-sub">'+esc(o.categoria||'')+'</div>'+
+        '</span></span>'+
+        '<span><span class="item-value">'+fmtBRL(o.valor||0)+'</span><span class="chev">▶</span></span>'+
+      '</summary>'+
+      '<div class="item-body"><div class="fields">'+
+        f('text','nome','Nome do bem',o.nome)+
+        '<div class="field"><label>Categoria</label><input type="text" data-k="categoria" list="catSugestoes" value="'+esc(o.categoria||'')+'"></div>'+
+        f('valor','valor','Valor estimado (R$)',fmtNum(o.valor||0))+
+        f('text','localizacao','Localização / onde está',o.localizacao)+
+        '<div class="subsection">Dados da compra</div>'+
+        f('date','compraData','Data da compra',o.compraData)+
+        f('valor','compraValor','Valor de compra (R$)',fmtNum(o.compraValor||0))+
+        f('text','vendedor','Vendedor / origem',o.vendedor)+
+        f('text','notaFiscal','Nota fiscal / recibo nº',o.notaFiscal)+
+        anexosZone('compra','Arquivos da compra (nota, certificado…)')+
+        '<div class="subsection">Notas e arquivos</div>'+
+        '<div class="field wide"><label>Notas</label><textarea data-k="notas">'+esc(o.notas)+'</textarea></div>'+
+        anexosZone('notas','Arquivos (fotos, laudos, seguros…)')+
+      '</div>'+
+      '<div class="item-actions"><button class="btn-danger small" data-del>remover bem</button></div></div>';
+    ligarCampos(d,o,'outro');
     return d;
   }
 
@@ -530,19 +630,26 @@
     card.querySelector('[data-del]').addEventListener('click',async()=>{
       const nome=obj.nome||'este item';
       if(!confirm('Remover "'+nome+'"? Os arquivos anexados também serão apagados.'))return;
-      // apaga anexos do item
-      if(obj.anexos)for(const sec of Object.keys(obj.anexos))for(const ax of obj.anexos[sec])await apagarArquivo(ax.id);
+      for(const ax of todosAnexos(obj))await apagarArquivo(ax.id);
       if(tipo==='imovel')imoveis=imoveis.filter(x=>x.id!==obj.id);
       else if(tipo==='veic')veic=veic.filter(x=>x.id!==obj.id);
-      else fin=fin.filter(x=>x.id!==obj.id);
+      else if(tipo==='fin')fin=fin.filter(x=>x.id!==obj.id);
+      else outros=outros.filter(x=>x.id!==obj.id);
       aberto.delete(obj.id);
       snapshot();renderAll();
     });
     wireAnexos(card,obj);
   }
 
+  function todosAnexos(obj){
+    const lista=[];
+    if(obj.anexos)for(const s of Object.keys(obj.anexos))for(const ax of obj.anexos[s])lista.push(ax);
+    if(obj.extratos)for(const e of obj.extratos)for(const ax of (e.anexos||[]))lista.push(ax);
+    return lista;
+  }
+
   function atualizarResumo(card,obj,tipo){
-    card.querySelector('.item-name').textContent=obj.nome||(tipo==='imovel'?'Imóvel':(tipo==='veic'?'Veículo':'Conta'));
+    card.querySelector('.item-name').textContent=obj.nome||(tipo==='imovel'?'Imóvel':(tipo==='veic'?'Veículo':(tipo==='fin'?'Conta':'Bem')));
     card.querySelector('.item-value').textContent=fmtBRL(obj.valor||0);
     const subEl=card.querySelector('.item-sub');
     if(!subEl)return;
@@ -556,14 +663,17 @@
       if(obj.placa)sub.push(obj.placa);
       if(obj.ano)sub.push(obj.ano);
       subEl.textContent=sub.join(' · ');
-    } else {
+    } else if(tipo==='fin'){
       const tipoNome=(FIN_TIPOS.find(t=>t.id===obj.tipo)||FIN_TIPOS[0]).nome;
-      subEl.textContent=tipoNome+' · atualizado '+fmtDate(obj.atualizado);
+      const n=(obj.extratos||[]).length;
+      subEl.textContent=tipoNome+(n?' · '+n+' extrato'+(n>1?'s':''):'')+' · atualizado '+fmtDate(obj.atualizado);
       card.querySelector('.item-dot').style.background=FIN_CORES[obj.tipo]||'#7fb0c9';
+    } else {
+      subEl.textContent=obj.categoria||'';
     }
   }
 
-  // ---------- anexos ----------
+  // ---------- anexos genéricos ----------
   function wireAnexos(card,obj){
     card.querySelectorAll('[data-addanexo]').forEach(btn=>{
       const secao=btn.dataset.addanexo;
@@ -576,7 +686,7 @@
         if(!obj.anexos)obj.anexos={};
         if(!obj.anexos[secao])obj.anexos[secao]=[];
         for(const file of Array.from(input.files)){
-          if(file.size>MAX_ARQ){alert('"'+file.name+'" é muito grande (máx. 25 MB).');continue;}
+          if(file.size>MAX_ARQ){alert('"'+file.name+'" é muito grande (máx. 50 MB).');continue;}
           const id=uid('x');
           try{
             await salvarArquivo(id,file);
@@ -594,6 +704,40 @@
     });
   }
 
+  function anexoRow(ax,onDelete){
+    const row=document.createElement('div');
+    row.className='anexo-item';
+    const ehImg=(ax.tipo||'').startsWith('image/');
+    row.innerHTML=
+      (ehImg?'<img class="anexo-thumb" alt="">':'<span>📄</span>')+
+      '<span class="anexo-nome">'+esc(ax.nome)+'</span>'+
+      '<span class="anexo-tam">'+fmtTam(ax.tam||0)+'</span>'+
+      '<button type="button" class="btn-secondary small" data-abrir>abrir</button>'+
+      '<button type="button" class="btn-danger small" data-apagar>✕</button>';
+    if(ehImg){
+      lerArquivo(ax.id).then(blob=>{
+        if(blob){row.querySelector('.anexo-thumb').src=URL.createObjectURL(blob);}
+      });
+    }
+    row.querySelector('[data-abrir]').addEventListener('click',async()=>{
+      const blob=await lerArquivo(ax.id);
+      if(!blob){alert('Arquivo não encontrado neste aparelho.');return;}
+      const url=URL.createObjectURL(blob);
+      const w=window.open(url,'_blank');
+      if(!w){
+        const a=document.createElement('a');
+        a.href=url;a.download=ax.nome;a.click();
+      }
+      setTimeout(()=>URL.revokeObjectURL(url),120000);
+    });
+    row.querySelector('[data-apagar]').addEventListener('click',async()=>{
+      if(!confirm('Remover o arquivo "'+ax.nome+'"?'))return;
+      await apagarArquivo(ax.id);
+      onDelete(ax);
+    });
+    return row;
+  }
+
   function renderAnexos(card,obj,secao){
     const zone=card.querySelector('[data-anexos="'+secao+'"] .anexo-list');
     if(!zone)return;
@@ -606,64 +750,132 @@
       return;
     }
     lista.forEach(ax=>{
-      const row=document.createElement('div');
-      row.className='anexo-item';
-      const ehImg=(ax.tipo||'').startsWith('image/');
-      row.innerHTML=
-        (ehImg?'<img class="anexo-thumb" alt="">':'<span>📄</span>')+
-        '<span class="anexo-nome">'+esc(ax.nome)+'</span>'+
-        '<span class="anexo-tam">'+fmtTam(ax.tam||0)+'</span>'+
-        '<button type="button" class="btn-secondary small" data-abrir>abrir</button>'+
-        '<button type="button" class="btn-danger small" data-apagar>✕</button>';
-      if(ehImg){
-        lerArquivo(ax.id).then(blob=>{
-          if(blob){
-            const img=row.querySelector('.anexo-thumb');
-            img.src=URL.createObjectURL(blob);
-          }
-        });
-      }
-      row.querySelector('[data-abrir]').addEventListener('click',async()=>{
-        const blob=await lerArquivo(ax.id);
-        if(!blob){alert('Arquivo não encontrado neste aparelho.');return;}
-        const url=URL.createObjectURL(blob);
-        const w=window.open(url,'_blank');
-        if(!w){
-          const a=document.createElement('a');
-          a.href=url;a.download=ax.nome;
-          a.click();
-        }
-        setTimeout(()=>URL.revokeObjectURL(url),120000);
-      });
-      row.querySelector('[data-apagar]').addEventListener('click',async()=>{
-        if(!confirm('Remover o arquivo "'+ax.nome+'"?'))return;
-        await apagarArquivo(ax.id);
+      zone.appendChild(anexoRow(ax,()=>{
         obj.anexos[secao]=obj.anexos[secao].filter(x=>x.id!==ax.id);
         save();
         renderAnexos(card,obj,secao);
+      }));
+    });
+  }
+
+  // ---------- extratos mensais ----------
+  function wireExtratos(card,fc){
+    const mesInput=card.querySelector('[data-extrato-mes]');
+    const addBtn=card.querySelector('[data-extrato-add]');
+    const fileInput=card.querySelector('[data-extrato-file]');
+    // mês padrão: mês passado
+    const d=new Date();d.setMonth(d.getMonth()-1);
+    mesInput.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    addBtn.addEventListener('click',()=>{
+      if(!db){alert('Este navegador não suporta armazenamento de arquivos.');return;}
+      if(!mesInput.value){alert('Escolha o mês do extrato.');return;}
+      fileInput.click();
+    });
+    fileInput.addEventListener('change',async()=>{
+      const mes=mesInput.value;
+      if(!fc.extratos)fc.extratos=[];
+      let entrada=fc.extratos.find(e=>e.mes===mes);
+      if(!entrada){entrada={mes,anexos:[]};fc.extratos.push(entrada);}
+      for(const file of Array.from(fileInput.files)){
+        if(file.size>MAX_ARQ){alert('"'+file.name+'" é muito grande (máx. 50 MB).');continue;}
+        const id=uid('x');
+        try{
+          await salvarArquivo(id,file);
+          entrada.anexos.push({id,nome:file.name,tipo:file.type||'',tam:file.size});
+        }catch(e){
+          alert('Não foi possível salvar "'+file.name+'".');
+        }
+      }
+      fileInput.value='';
+      fc.extratos.sort((a,b)=>a.mes<b.mes?1:-1);
+      fc.atualizado=hoje();
+      save();
+      renderExtratos(card,fc);
+      atualizarResumo(card,fc,'fin');
+    });
+    renderExtratos(card,fc);
+  }
+
+  function renderExtratos(card,fc){
+    const zone=card.querySelector('.extrato-list');
+    if(!zone)return;
+    zone.innerHTML='';
+    const extratos=(fc.extratos||[]).filter(e=>e.anexos&&e.anexos.length);
+    if(!extratos.length){
+      const v=document.createElement('div');
+      v.className='anexo-vazio';v.textContent='nenhum extrato arquivado ainda';
+      zone.appendChild(v);
+      return;
+    }
+    extratos.forEach(entrada=>{
+      const box=document.createElement('div');
+      box.className='extrato-mes';
+      const titulo=document.createElement('div');
+      titulo.className='extrato-mes-titulo';
+      titulo.textContent='📅 '+fmtMes(entrada.mes);
+      box.appendChild(titulo);
+      const lista=document.createElement('div');
+      lista.className='anexo-list';
+      entrada.anexos.forEach(ax=>{
+        lista.appendChild(anexoRow(ax,()=>{
+          entrada.anexos=entrada.anexos.filter(x=>x.id!==ax.id);
+          fc.extratos=fc.extratos.filter(e=>e.anexos.length>0);
+          save();
+          renderExtratos(card,fc);
+          atualizarResumo(card,fc,'fin');
+        }));
       });
-      zone.appendChild(row);
+      box.appendChild(lista);
+      zone.appendChild(box);
     });
   }
 
   // ---------- listas ----------
   function renderImoveis(){
     els.imoveisList.innerHTML='';
-    els.imoveisEmpty.style.display=imoveis.length?'none':'block';
+    const vis=[...imoveis].filter(i=>combina([i.nome,i.localizacao,i.inquilino,i.proprietario,i.registro]))
+      .sort((a,b)=>(b.valor||0)-(a.valor||0));
+    els.imoveisEmpty.style.display=vis.length?'none':'block';
+    if(imoveis.length&&!vis.length)els.imoveisEmpty.textContent='Nenhum imóvel corresponde à busca.';
+    else els.imoveisEmpty.textContent='Nenhum imóvel cadastrado. Toque em “+ Imóvel”.';
     els.imoveisCount.textContent=imoveis.length?imoveis.length+(imoveis.length===1?' imóvel':' imóveis'):'';
-    [...imoveis].sort((a,b)=>(b.valor||0)-(a.valor||0)).forEach(im=>els.imoveisList.appendChild(imovelCard(im)));
+    vis.forEach(im=>els.imoveisList.appendChild(imovelCard(im)));
   }
   function renderVeic(){
     els.veicList.innerHTML='';
-    els.veicEmpty.style.display=veic.length?'none':'block';
+    const vis=[...veic].filter(v=>combina([v.nome,v.placa,v.ano,v.renavam]))
+      .sort((a,b)=>(b.valor||0)-(a.valor||0));
+    els.veicEmpty.style.display=vis.length?'none':'block';
+    if(veic.length&&!vis.length)els.veicEmpty.textContent='Nenhum veículo corresponde à busca.';
+    else els.veicEmpty.textContent='Nenhum veículo cadastrado. Toque em “+ Veículo”.';
     els.veicCount.textContent=veic.length?veic.length+(veic.length===1?' veículo':' veículos'):'';
-    [...veic].sort((a,b)=>(b.valor||0)-(a.valor||0)).forEach(v=>els.veicList.appendChild(veicCard(v)));
+    vis.forEach(v=>els.veicList.appendChild(veicCard(v)));
   }
   function renderFin(){
     els.finList.innerHTML='';
-    els.finEmpty.style.display=fin.length?'none':'block';
+    const vis=[...fin].filter(x=>combina([x.nome,x.notas]))
+      .sort((a,b)=>(b.valor||0)-(a.valor||0));
+    els.finEmpty.style.display=vis.length?'none':'block';
+    if(fin.length&&!vis.length)els.finEmpty.textContent='Nenhuma conta corresponde à busca.';
+    else els.finEmpty.textContent='Nenhuma conta cadastrada. Toque em “+ Conta”.';
     els.finCount.textContent=fin.length?fin.length+(fin.length===1?' conta':' contas'):'';
-    [...fin].sort((a,b)=>(b.valor||0)-(a.valor||0)).forEach(fc=>els.finList.appendChild(finCard(fc)));
+    vis.forEach(fc=>els.finList.appendChild(finCard(fc)));
+  }
+  function renderOutros(){
+    els.outrosList.innerHTML='';
+    const vis=[...outros].filter(o=>combina([o.nome,o.categoria,o.localizacao]))
+      .sort((a,b)=>(b.valor||0)-(a.valor||0));
+    els.outrosEmpty.style.display=vis.length?'none':'block';
+    if(outros.length&&!vis.length)els.outrosEmpty.textContent='Nenhum bem corresponde à busca.';
+    else els.outrosEmpty.textContent='Obras de arte, joias, coleções, participações… Toque em “+ Bem”.';
+    els.outrosCount.textContent=outros.length?outros.length+(outros.length===1?' bem':' bens'):'';
+    vis.forEach(o=>els.outrosList.appendChild(outroCard(o)));
+    // sugestões de categoria
+    let dl=document.getElementById('catSugestoes');
+    if(!dl){dl=document.createElement('datalist');dl.id='catSugestoes';document.body.appendChild(dl);}
+    const cats=new Set(['Obra de arte','Joias','Coleção','Participação em empresa','Equipamento','Outro']);
+    outros.forEach(o=>{if(o.categoria)cats.add(o.categoria);});
+    dl.innerHTML=[...cats].map(c=>'<option value="'+esc(c)+'">').join('');
   }
 
   // ---------- donut ----------
@@ -686,6 +898,16 @@
     for(const ft of FIN_TIPOS){
       const s=fin.filter(x=>x.tipo===ft.id).reduce((a,b)=>a+(b.valor||0),0);
       if(s>0)dados.push({nome:ft.nome,cor:FIN_CORES[ft.id],v:s});
+    }
+    // outros: agrupa por categoria
+    const porCat={};
+    outros.forEach(o=>{
+      const c=o.categoria||'Outros bens';
+      porCat[c]=(porCat[c]||0)+(o.valor||0);
+    });
+    let pi=0;
+    for(const c of Object.keys(porCat)){
+      if(porCat[c]>0)dados.push({nome:c,cor:PALETA[pi++%PALETA.length],v:porCat[c]});
     }
     const cx=100,cy=100,r=70,lw=26;
     let ang=-Math.PI/2;
@@ -710,7 +932,7 @@
       const pct=(d.v/t*100).toFixed(1).replace('.',',');
       const div=document.createElement('div');
       div.className='legend-item';
-      div.innerHTML='<span class="legend-left"><span class="item-dot" style="background:'+d.cor+';margin-right:8px;"></span>'+d.nome+'</span>'+
+      div.innerHTML='<span class="legend-left"><span class="item-dot" style="background:'+d.cor+';margin-right:8px;"></span>'+esc(d.nome)+'</span>'+
         '<span>'+fmtBRL(d.v)+'<span class="legend-pct">'+pct+'%</span></span>';
       els.catLegend.appendChild(div);
     });
@@ -789,94 +1011,198 @@
   }
 
   function renderAll(){
-    renderTotal();renderImoveis();renderVeic();renderFin();renderDonut();renderLine();
+    renderTotal();renderImoveis();renderVeic();renderFin();renderOutros();renderDonut();renderLine();
   }
 
-  // ---------- botões ----------
+  // ---------- adicionar itens ----------
   $('addImovelBtn').addEventListener('click',()=>{
     const im={id:uid('i'),nome:'',valor:0,localizacao:'',registro:'',cartorio:'',iptuNum:'',iptuValor:0,
       proprietario:'',alugado:false,aluguelValor:0,inquilino:'',contratoInicio:'',contratoFim:'',notas:'',anexos:{},atualizado:hoje()};
-    imoveis.unshift(im);
-    aberto.add(im.id);
-    save();renderAll();
+    imoveis.unshift(im);aberto.add(im.id);save();renderAll();
     const campo=els.imoveisList.querySelector('details[data-id="'+im.id+'"] input[data-k="nome"]');
     if(campo)campo.focus();
   });
   $('addVeicBtn').addEventListener('click',()=>{
     const v={id:uid('v'),nome:'',valor:0,placa:'',ano:'',renavam:'',ipvaValor:0,
       compraData:'',compraValor:0,notaFiscal:'',vendedor:'',notas:'',anexos:{},atualizado:hoje()};
-    veic.unshift(v);
-    aberto.add(v.id);
-    save();renderAll();
+    veic.unshift(v);aberto.add(v.id);save();renderAll();
     const campo=els.veicList.querySelector('details[data-id="'+v.id+'"] input[data-k="nome"]');
     if(campo)campo.focus();
   });
   $('addFinBtn').addEventListener('click',()=>{
-    const fc={id:uid('f'),nome:'',tipo:'conta',valor:0,notas:'',anexos:{},atualizado:hoje()};
-    fin.unshift(fc);
-    aberto.add(fc.id);
-    save();renderAll();
+    const fc={id:uid('f'),nome:'',tipo:'conta',valor:0,notas:'',anexos:{},extratos:[],atualizado:hoje()};
+    fin.unshift(fc);aberto.add(fc.id);save();renderAll();
     const campo=els.finList.querySelector('details[data-id="'+fc.id+'"] input[data-k="nome"]');
     if(campo)campo.focus();
   });
+  $('addOutroBtn').addEventListener('click',()=>{
+    const o={id:uid('o'),nome:'',categoria:'',valor:0,localizacao:'',compraData:'',compraValor:0,
+      vendedor:'',notaFiscal:'',notas:'',anexos:{},atualizado:hoje()};
+    outros.unshift(o);aberto.add(o.id);save();renderAll();
+    const campo=els.outrosList.querySelector('details[data-id="'+o.id+'"] input[data-k="nome"]');
+    if(campo)campo.focus();
+  });
 
+  // ---------- exportações ----------
   $('exportBtn').addEventListener('click',()=>{
-    if(imoveis.length===0&&veic.length===0&&fin.length===0){alert('Nada para exportar ainda.');return;}
+    if(imoveis.length===0&&veic.length===0&&fin.length===0&&outros.length===0){alert('Nada para exportar ainda.');return;}
     const q=x=>'"'+String(x||'').replace(/"/g,'""')+'"';
     let csv='IMOVEIS\nNome,Localizacao,Valor,Registro,Cartorio,Inscricao IPTU,IPTU anual,Proprietario,Alugado,Aluguel mensal,Inquilino,Inicio contrato,Fim contrato,Notas,Arquivos\n';
     imoveis.forEach(i=>{
       csv+=[q(i.nome),q(i.localizacao),(i.valor||0).toFixed(2),q(i.registro),q(i.cartorio),q(i.iptuNum),(i.iptuValor||0).toFixed(2),
-        q(i.proprietario),i.alugado?'sim':'nao',(i.aluguelValor||0).toFixed(2),q(i.inquilino),i.contratoInicio||'',i.contratoFim||'',q(i.notas),contaAnexos(i)].join(',')+'\n';
+        q(i.proprietario),i.alugado?'sim':'nao',(i.aluguelValor||0).toFixed(2),q(i.inquilino),i.contratoInicio||'',i.contratoFim||'',q(i.notas),todosAnexos(i).length].join(',')+'\n';
     });
     csv+='\nVEICULOS\nModelo,Valor,Placa,Ano,Renavam,IPVA anual,Data compra,Valor compra,Nota fiscal,Vendedor,Notas,Arquivos\n';
     veic.forEach(v=>{
       csv+=[q(v.nome),(v.valor||0).toFixed(2),q(v.placa),q(v.ano),q(v.renavam),(v.ipvaValor||0).toFixed(2),
-        v.compraData||'',(v.compraValor||0).toFixed(2),q(v.notaFiscal),q(v.vendedor),q(v.notas),contaAnexos(v)].join(',')+'\n';
+        v.compraData||'',(v.compraValor||0).toFixed(2),q(v.notaFiscal),q(v.vendedor),q(v.notas),todosAnexos(v).length].join(',')+'\n';
     });
-    csv+='\nFINANCEIRO\nNome,Tipo,Valor,Notas,Arquivos,Atualizado\n';
+    csv+='\nFINANCEIRO\nNome,Tipo,Valor,Extratos arquivados,Notas,Arquivos,Atualizado\n';
     fin.forEach(x=>{
       const tn=(FIN_TIPOS.find(t=>t.id===x.tipo)||{}).nome||x.tipo;
-      csv+=[q(x.nome),tn,(x.valor||0).toFixed(2),q(x.notas),contaAnexos(x),x.atualizado].join(',')+'\n';
+      csv+=[q(x.nome),tn,(x.valor||0).toFixed(2),(x.extratos||[]).length,q(x.notas),todosAnexos(x).length,x.atualizado].join(',')+'\n';
     });
-    csv+='\nTOTAL,,'+total().toFixed(2)+'\n\nHISTORICO\nDia,Total,Imoveis,Veiculos,Financeiro\n';
-    hist.forEach(h=>{csv+=h.dia+','+h.total.toFixed(2)+','+(h.imoveis||0).toFixed(2)+','+(h.veiculos||0).toFixed(2)+','+(h.financeiro||0).toFixed(2)+'\n';});
-    baixar(csv,'patrimonio.csv','text/csv');
+    csv+='\nOUTROS BENS\nNome,Categoria,Valor,Localizacao,Data compra,Valor compra,Vendedor,Nota fiscal,Notas,Arquivos\n';
+    outros.forEach(o=>{
+      csv+=[q(o.nome),q(o.categoria),(o.valor||0).toFixed(2),q(o.localizacao),o.compraData||'',(o.compraValor||0).toFixed(2),
+        q(o.vendedor),q(o.notaFiscal),q(o.notas),todosAnexos(o).length].join(',')+'\n';
+    });
+    csv+='\nTOTAL,,'+total().toFixed(2)+'\n\nHISTORICO\nDia,Total,Imoveis,Veiculos,Financeiro,Outros\n';
+    hist.forEach(h=>{csv+=h.dia+','+h.total.toFixed(2)+','+(h.imoveis||0).toFixed(2)+','+(h.veiculos||0).toFixed(2)+','+(h.financeiro||0).toFixed(2)+','+(h.outros||0).toFixed(2)+'\n';});
+    baixar(new Blob([csv],{type:'text/csv;charset=utf-8;'}),'patrimonio.csv');
   });
-  function contaAnexos(obj){
-    let n=0;
-    if(obj.anexos)for(const s of Object.keys(obj.anexos))n+=obj.anexos[s].length;
-    return n;
+
+  // ---------- backup ZIP (dados + todos os arquivos) ----------
+  const crcTable=(()=>{
+    const t=new Uint32Array(256);
+    for(let n=0;n<256;n++){
+      let c=n;
+      for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);
+      t[n]=c>>>0;
+    }
+    return t;
+  })();
+  function crc32(dados){
+    let c=0xFFFFFFFF;
+    for(let i=0;i<dados.length;i++)c=(c>>>8)^crcTable[(c^dados[i])&0xFF];
+    return (c^0xFFFFFFFF)>>>0;
+  }
+  function limpaNome(s){
+    return String(s||'arquivo').normalize('NFD').replace(/[̀-ͯ]/g,'')
+      .replace(/[^a-zA-Z0-9._ -]/g,'_').slice(0,80);
+  }
+  async function gerarZip(entradas){
+    const enc=new TextEncoder();
+    const partes=[];const centrais=[];let offset=0;let tamCentral=0;
+    for(const e of entradas){
+      const nomeB=enc.encode(e.nome);
+      const dados=new Uint8Array(await e.blob.arrayBuffer());
+      const crc=crc32(dados);
+      const local=new DataView(new ArrayBuffer(30));
+      local.setUint32(0,0x04034b50,true);
+      local.setUint16(4,20,true);
+      local.setUint16(6,0x0800,true);
+      local.setUint16(8,0,true);
+      local.setUint32(14,crc,true);
+      local.setUint32(18,dados.length,true);
+      local.setUint32(22,dados.length,true);
+      local.setUint16(26,nomeB.length,true);
+      partes.push(local.buffer,nomeB,dados);
+      const central=new DataView(new ArrayBuffer(46));
+      central.setUint32(0,0x02014b50,true);
+      central.setUint16(4,20,true);central.setUint16(6,20,true);
+      central.setUint16(8,0x0800,true);
+      central.setUint32(16,crc,true);
+      central.setUint32(20,dados.length,true);
+      central.setUint32(24,dados.length,true);
+      central.setUint16(28,nomeB.length,true);
+      central.setUint32(42,offset,true);
+      centrais.push(central.buffer,nomeB);
+      tamCentral+=46+nomeB.length;
+      offset+=30+nomeB.length+dados.length;
+    }
+    const fim=new DataView(new ArrayBuffer(22));
+    fim.setUint32(0,0x06054b50,true);
+    fim.setUint16(8,entradas.length,true);
+    fim.setUint16(10,entradas.length,true);
+    fim.setUint32(12,tamCentral,true);
+    fim.setUint32(16,offset,true);
+    return new Blob([...partes,...centrais,fim.buffer],{type:'application/zip'});
   }
 
-  $('backupBtn').addEventListener('click',()=>{
-    const data=JSON.stringify({imoveis,veic,fin,hist,exportadoEm:new Date().toISOString(),
-      aviso:'Este backup contem os dados das fichas. Os arquivos anexados ficam no banco do navegador e nao entram neste JSON.'},null,2);
-    baixar(data,'patrimonio_backup.json','application/json');
+  $('backupBtn').addEventListener('click',async()=>{
+    const btn=$('backupBtn');
+    btn.disabled=true;btn.textContent='Gerando backup…';
+    try{
+      const entradas=[];
+      const dados={imoveis,veic,fin,outros,hist,exportadoEm:new Date().toISOString()};
+      entradas.push({nome:'dados.json',blob:new Blob([JSON.stringify(dados,null,2)],{type:'application/json'})});
+      const grupos=[
+        ['imoveis',imoveis],['veiculos',veic],['financeiro',fin],['outros_bens',outros]
+      ];
+      const usados=new Set();
+      for(const [pasta,lista] of grupos){
+        for(const item of lista){
+          const nomeItem=limpaNome(item.nome||item.id);
+          if(item.anexos){
+            for(const sec of Object.keys(item.anexos)){
+              for(const ax of item.anexos[sec]){
+                const blob=await lerArquivo(ax.id);
+                if(!blob)continue;
+                let caminho=pasta+'/'+nomeItem+'/'+sec+'/'+limpaNome(ax.nome);
+                let n=1;
+                while(usados.has(caminho)){caminho=pasta+'/'+nomeItem+'/'+sec+'/'+n+'_'+limpaNome(ax.nome);n++;}
+                usados.add(caminho);
+                entradas.push({nome:caminho,blob});
+              }
+            }
+          }
+          if(item.extratos){
+            for(const ext of item.extratos){
+              for(const ax of (ext.anexos||[])){
+                const blob=await lerArquivo(ax.id);
+                if(!blob)continue;
+                let caminho=pasta+'/'+nomeItem+'/extratos/'+ext.mes+'_'+limpaNome(ax.nome);
+                let n=1;
+                while(usados.has(caminho)){caminho=pasta+'/'+nomeItem+'/extratos/'+ext.mes+'_'+n+'_'+limpaNome(ax.nome);n++;}
+                usados.add(caminho);
+                entradas.push({nome:caminho,blob});
+              }
+            }
+          }
+        }
+      }
+      const zip=await gerarZip(entradas);
+      baixar(zip,'patrimonio_backup_'+hoje()+'.zip');
+    }catch(e){
+      alert('Não foi possível gerar o backup: '+e.message);
+    }finally{
+      btn.disabled=false;btn.textContent='⤓ Backup ZIP (dados + arquivos)';
+    }
   });
 
-  function baixar(conteudo,nome,tipo){
-    const blob=new Blob([conteudo],{type:tipo+';charset=utf-8;'});
+  function baixar(blob,nome){
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
     a.href=url;a.download=nome;a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
   }
 
   $('wipeBtn').addEventListener('click',async()=>{
-    if(!confirm('Apagar TODOS os bens, contas, histórico e arquivos anexados? Isso não pode ser desfeito.'))return;
-    imoveis=[];veic=[];fin=[];hist=[];aberto.clear();
+    if(!confirm('Apagar TODOS os bens, contas, extratos, histórico e arquivos? Isso não pode ser desfeito.'))return;
+    if(!confirm('Tem certeza? Considere fazer um Backup ZIP antes.'))return;
+    imoveis=[];veic=[];fin=[];outros=[];hist=[];aberto.clear();
+    await idbClear('arquivos');
+    await idbClear('dados');
     try{
-      localStorage.removeItem(K_IMOVEIS);localStorage.removeItem(K_VEIC);
-      localStorage.removeItem(K_FIN);localStorage.removeItem(K_HIST);
+      ['patrimonio_imoveis_v1','patrimonio_veic_v1','patrimonio_fin_v1','patrimonio_hist_v1'].forEach(k=>localStorage.removeItem(k));
     }catch(e){}
-    await limparArquivos();
     renderAll();
   });
 
   // ---------- init ----------
-  abrirDB().then(()=>{
-    load();
-    save();
+  abrirDB().then(async()=>{
+    await load();
     renderAll();
   });
 })();
