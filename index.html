@@ -137,8 +137,16 @@
   /* extratos mensais */
   .extrato-add{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;}
   .extrato-add input[type=month]{flex:1;min-width:140px;}
-  .extrato-mes{margin-bottom:8px;}
-  .extrato-mes-titulo{font-size:12px;font-weight:600;color:var(--fin);margin:6px 0 4px;}
+  details.extrato-mes{border:1px solid var(--line);border-radius:9px;background:var(--card);margin-bottom:6px;overflow:hidden;}
+  details.extrato-mes summary{
+    list-style:none;display:flex;align-items:center;gap:8px;
+    padding:9px 10px;cursor:pointer;font-size:12px;font-weight:600;color:var(--fin);
+  }
+  details.extrato-mes summary::-webkit-details-marker{display:none;}
+  .chev2{color:var(--cream-dim);font-size:10px;transition:transform .15s ease;}
+  details.extrato-mes[open] .chev2{transform:rotate(90deg);}
+  .extrato-qtd{color:var(--cream-dim);font-weight:400;margin-left:auto;font-size:11px;}
+  details.extrato-mes .anexo-list{padding:0 10px 9px;margin-bottom:0;}
 
   .donut-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
   .chart-box svg{width:100%;height:auto;display:block;}
@@ -822,7 +830,7 @@
       fc.extratos.sort((a,b)=>a.mes<b.mes?1:-1);
       fc.atualizado=hoje();
       save();
-      renderExtratos(card,fc);
+      renderExtratos(card,fc,mes);
       atualizarResumo(card,fc,'fin');
     };
     fileInput.addEventListener('change',processa(fileInput));
@@ -830,7 +838,7 @@
     renderExtratos(card,fc);
   }
 
-  function renderExtratos(card,fc){
+  function renderExtratos(card,fc,abrirMes){
     const zone=card.querySelector('.extrato-list');
     if(!zone)return;
     zone.innerHTML='';
@@ -842,12 +850,13 @@
       return;
     }
     extratos.forEach(entrada=>{
-      const box=document.createElement('div');
-      box.className='extrato-mes';
-      const titulo=document.createElement('div');
-      titulo.className='extrato-mes-titulo';
-      titulo.textContent='📅 '+fmtMes(entrada.mes);
-      box.appendChild(titulo);
+      const det=document.createElement('details');
+      det.className='extrato-mes';
+      if(entrada.mes===abrirMes)det.open=true;
+      const sum=document.createElement('summary');
+      sum.innerHTML='<span class="chev2">▶</span> 📅 '+fmtMes(entrada.mes)+
+        ' <span class="extrato-qtd">'+entrada.anexos.length+' arquivo'+(entrada.anexos.length>1?'s':'')+'</span>';
+      det.appendChild(sum);
       const lista=document.createElement('div');
       lista.className='anexo-list';
       entrada.anexos.forEach(ax=>{
@@ -855,12 +864,12 @@
           entrada.anexos=entrada.anexos.filter(x=>x.id!==ax.id);
           fc.extratos=fc.extratos.filter(e=>e.anexos.length>0);
           save();
-          renderExtratos(card,fc);
+          renderExtratos(card,fc,entrada.mes);
           atualizarResumo(card,fc,'fin');
         }));
       });
-      box.appendChild(lista);
-      zone.appendChild(box);
+      det.appendChild(lista);
+      zone.appendChild(det);
     });
   }
 
