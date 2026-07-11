@@ -107,6 +107,7 @@
   .item-sub{font-size:11px;color:var(--cream-dim);margin-top:2px;}
   .item-value{font-weight:600;font-size:14px;white-space:nowrap;}
   .chev{color:var(--cream-dim);font-size:11px;transition:transform .15s ease;margin-left:4px;}
+  .lock-btn{background:transparent;border:none;font-size:14px;padding:2px 4px;cursor:pointer;line-height:1;}
   details[open] .chev{transform:rotate(90deg);}
 
   .item-body{padding:4px 14px 14px;border-top:1px solid var(--line);}
@@ -255,7 +256,8 @@
   <footer>
     Dados e arquivos ficam no banco interno do navegador (IndexedDB) — comporta uma base grande e nada é enviado para a internet.<br>
     Faça o backup ZIP de tempos em tempos: ele contém todos os dados e todos os arquivos anexados.<br>
-    Para usar no notebook e no desktop: gere o Backup ZIP em um computador, leve o arquivo (nuvem ou pendrive) e use “Restaurar ZIP” no outro.
+    Para usar no notebook e no desktop: gere o Backup ZIP em um computador, leve o arquivo (nuvem ou pendrive) e use “Restaurar ZIP” no outro.<br>
+    O cadeado 🔒 pede senha para abrir o item na tela — é uma proteção de privacidade, não criptografia dos dados no aparelho.
   </footer>
 </div>
 
@@ -285,6 +287,13 @@
 
   let imoveis=[], veic=[], fin=[], outros=[], hist=[];
   const aberto=new Set();
+  const desbloqueados=new Set(); // itens com senha já liberados nesta sessão
+
+  async function hashSenha(senha,sal){
+    const dados=new TextEncoder().encode(sal+'::'+senha);
+    const h=await crypto.subtle.digest('SHA-256',dados);
+    return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
   let filtro='';
 
   const $=id=>document.getElementById(id);
@@ -530,13 +539,17 @@
     const sub=[];
     if(im.localizacao)sub.push(im.localizacao);
     if(im.alugado)sub.push('alugado por '+fmtMoeda(im.aluguelValor||0,im.moeda)+'/mês');
+    const bloqueado=!!im.senhaHash&&!desbloqueados.has(im.id);
+    if(bloqueado)d.open=false;
     d.innerHTML=
       '<summary>'+
         '<span class="item-title"><span class="item-dot" style="background:var(--imovel)"></span>'+
           '<span><span class="item-name">'+esc(im.nome||'Imóvel')+'</span>'+
-          '<div class="item-sub">'+esc(sub.join(' · '))+'</div>'+
+          '<div class="item-sub">'+(bloqueado?'🔒 protegido por senha':esc(sub.join(' · ')))+'</div>'+
         '</span></span>'+
-        '<span><span class="item-value">'+fmtMoeda(im.valor||0,im.moeda)+'</span><span class="chev">▶</span></span>'+
+        '<span style="display:flex;align-items:center;gap:2px;"><span class="item-value">'+(bloqueado?'••••':fmtMoeda(im.valor||0,im.moeda))+'</span>'+
+        '<button type="button" class="lock-btn" data-lock title="proteger com senha">'+(im.senhaHash?'🔒':'🔓')+'</button>'+
+        '<span class="chev">▶</span></span>'+
       '</summary>'+
       '<div class="item-body"><div class="fields">'+
         f('text','nome','Nome do imóvel',im.nome)+
@@ -612,13 +625,17 @@
     if(aberto.has(fc.id))d.open=true;
     const tipoNome=(FIN_TIPOS.find(t=>t.id===fc.tipo)||FIN_TIPOS[0]).nome;
     const nExtratos=(fc.extratos||[]).length;
+    const bloqueado=!!fc.senhaHash&&!desbloqueados.has(fc.id);
+    if(bloqueado)d.open=false;
     d.innerHTML=
       '<summary>'+
         '<span class="item-title"><span class="item-dot" style="background:'+(FIN_CORES[fc.tipo]||'#7fb0c9')+'"></span>'+
           '<span><span class="item-name">'+esc(fc.nome||'Conta')+'</span>'+
-          '<div class="item-sub">'+tipoNome+(nExtratos?' · '+nExtratos+' extrato'+(nExtratos>1?'s':''):'')+' · atualizado '+fmtDate(fc.atualizado)+'</div>'+
+          '<div class="item-sub">'+(bloqueado?'🔒 protegido por senha':tipoNome+(nExtratos?' · '+nExtratos+' extrato'+(nExtratos>1?'s':''):'')+' · atualizado '+fmtDate(fc.atualizado))+'</div>'+
         '</span></span>'+
-        '<span><span class="item-value">'+fmtMoeda(fc.valor||0,fc.moeda)+'</span><span class="chev">▶</span></span>'+
+        '<span style="display:flex;align-items:center;gap:2px;"><span class="item-value">'+(bloqueado?'••••':fmtMoeda(fc.valor||0,fc.moeda))+'</span>'+
+        '<button type="button" class="lock-btn" data-lock title="proteger com senha">'+(fc.senhaHash?'🔒':'🔓')+'</button>'+
+        '<span class="chev">▶</span></span>'+
       '</summary>'+
       '<div class="item-body"><div class="fields">'+
         f('text','nome','Instituição / nome',fc.nome)+
@@ -686,6 +703,54 @@
     card.addEventListener('toggle',()=>{
       if(card.open)aberto.add(obj.id);else aberto.delete(obj.id);
     });
+    // ---- proteção por senha ----
+    const lockBtn=card.querySelector('[data-lock]');
+    if(lockBtn){
+      const sum=card.querySelector('summary');
+      sum.addEventListener('click',e=>{
+        if(e.target.closest('[data-lock]'))return;
+        if(card.open)return; // fechar é sempre permitido
+        if(obj.senhaHash&&!desbloqueados.has(obj.id)){
+          e.preventDefault();
+          (async()=>{
+            const senha=prompt('Senha para abrir "'+(obj.nome||'este item')+'":');
+            if(senha==null)return;
+            if(await hashSenha(senha,obj.id)===obj.senhaHash){
+              desbloqueados.add(obj.id);
+              aberto.add(obj.id);
+              renderAll();
+            } else alert('Senha incorreta.');
+          })();
+        }
+      });
+      lockBtn.addEventListener('click',e=>{
+        e.preventDefault();e.stopPropagation();
+        (async()=>{
+          if(!obj.senhaHash){
+            const s1=prompt('Defina uma senha para "'+(obj.nome||'este item')+'":');
+            if(!s1)return;
+            const s2=prompt('Repita a senha:');
+            if(s1!==s2){alert('As senhas não coincidem.');return;}
+            obj.senhaHash=await hashSenha(s1,obj.id);
+            desbloqueados.add(obj.id);
+            save();renderAll();
+            alert('Protegido — a senha será pedida para abrir. Guarde-a bem: não há como recuperar.');
+          } else {
+            if(!desbloqueados.has(obj.id)){
+              const s=prompt('Senha atual:');
+              if(s==null)return;
+              if(await hashSenha(s,obj.id)!==obj.senhaHash){alert('Senha incorreta.');return;}
+              desbloqueados.add(obj.id);
+            }
+            const nova=prompt('Nova senha (deixe vazio para REMOVER a proteção):','');
+            if(nova==null){renderAll();return;}
+            if(nova===''){delete obj.senhaHash;alert('Proteção removida.');}
+            else{obj.senhaHash=await hashSenha(nova,obj.id);alert('Senha alterada.');}
+            save();renderAll();
+          }
+        })();
+      });
+    }
     card.querySelectorAll('[data-k]').forEach(el=>{
       if(el.dataset.valor){
         // ao tocar no campo, seleciona tudo: digitar substitui o valor em vez de acrescentar
