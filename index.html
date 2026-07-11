@@ -73,6 +73,11 @@
 
   .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px;}
   .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap;}
+  details.sec>summary{list-style:none;cursor:pointer;}
+  details.sec>summary::-webkit-details-marker{display:none;}
+  .chev3{display:inline-block;color:var(--cream-dim);font-size:12px;transition:transform .15s ease;margin-right:4px;}
+  details.sec[open] .chev3{transform:rotate(90deg);}
+  details.sec:not([open])>summary.panel-head{margin-bottom:0;}
   .panel-head h2{font-size:16px;}
   .panel-head h2 .tag{font-size:11px;color:var(--cream-dim);font-family:'Inter',sans-serif;font-weight:500;margin-left:8px;}
   .h-imovel{color:var(--imovel);}
@@ -194,41 +199,41 @@
     <input type="search" id="busca" placeholder="🔍 Buscar por nome, endereço, placa, categoria…">
   </div>
 
-  <div class="panel">
-    <div class="panel-head">
-      <h2 class="h-imovel">Imóveis <span class="tag" id="imoveisCount"></span></h2>
+  <details class="panel sec" id="secImoveis" open>
+    <summary class="panel-head">
+      <h2 class="h-imovel"><span class="chev3">▶</span>Imóveis <span class="tag" id="imoveisCount"></span></h2>
       <button class="btn-primary small" id="addImovelBtn">+ Imóvel</button>
-    </div>
+    </summary>
     <div id="imoveisList"></div>
     <div class="empty-hint" id="imoveisEmpty">Nenhum imóvel cadastrado. Toque em “+ Imóvel”.</div>
-  </div>
+  </details>
 
-  <div class="panel">
-    <div class="panel-head">
-      <h2 class="h-veic">Veículos <span class="tag" id="veicCount"></span></h2>
+  <details class="panel sec" id="secVeic" open>
+    <summary class="panel-head">
+      <h2 class="h-veic"><span class="chev3">▶</span>Veículos <span class="tag" id="veicCount"></span></h2>
       <button class="btn-veic small" id="addVeicBtn">+ Veículo</button>
-    </div>
+    </summary>
     <div id="veicList"></div>
     <div class="empty-hint" id="veicEmpty">Nenhum veículo cadastrado. Toque em “+ Veículo”.</div>
-  </div>
+  </details>
 
-  <div class="panel">
-    <div class="panel-head">
-      <h2 class="h-fin">Financeiro <span class="tag" id="finCount"></span></h2>
+  <details class="panel sec" id="secFin" open>
+    <summary class="panel-head">
+      <h2 class="h-fin"><span class="chev3">▶</span>Financeiro <span class="tag" id="finCount"></span></h2>
       <button class="btn-fin small" id="addFinBtn">+ Conta</button>
-    </div>
+    </summary>
     <div id="finList"></div>
     <div class="empty-hint" id="finEmpty">Nenhuma conta cadastrada. Toque em “+ Conta”.</div>
-  </div>
+  </details>
 
-  <div class="panel">
-    <div class="panel-head">
-      <h2 class="h-outro">Outros bens <span class="tag" id="outrosCount"></span></h2>
+  <details class="panel sec" id="secOutros" open>
+    <summary class="panel-head">
+      <h2 class="h-outro"><span class="chev3">▶</span>Outros bens <span class="tag" id="outrosCount"></span></h2>
       <button class="btn-outro small" id="addOutroBtn">+ Bem</button>
-    </div>
+    </summary>
     <div id="outrosList"></div>
     <div class="empty-hint" id="outrosEmpty">Obras de arte, joias, coleções, participações… Toque em “+ Bem”.</div>
-  </div>
+  </details>
 
   <div class="panel">
     <div class="panel-head"><h2 style="color:var(--gold);">Divisão do patrimônio</h2></div>
@@ -1189,27 +1194,35 @@
   }
 
   // ---------- adicionar itens ----------
-  $('addImovelBtn').addEventListener('click',()=>{
+  $('addImovelBtn').addEventListener('click',e=>{
+    e.preventDefault();
+    $('secImoveis').open=true;
     const im={id:uid('i'),nome:'',valor:0,moeda:'BRL',localizacao:'',registro:'',cartorio:'',iptuNum:'',iptuValor:0,
       proprietario:'',alugado:false,aluguelValor:0,inquilino:'',contratoInicio:'',contratoFim:'',notas:'',anexos:{},atualizado:hoje()};
     imoveis.unshift(im);aberto.add(im.id);save();renderAll();
     const campo=els.imoveisList.querySelector('details[data-id="'+im.id+'"] input[data-k="nome"]');
     if(campo)campo.focus();
   });
-  $('addVeicBtn').addEventListener('click',()=>{
+  $('addVeicBtn').addEventListener('click',e=>{
+    e.preventDefault();
+    $('secVeic').open=true;
     const v={id:uid('v'),nome:'',valor:0,placa:'',ano:'',renavam:'',ipvaValor:0,
       compraData:'',compraValor:0,notaFiscal:'',vendedor:'',notas:'',anexos:{},atualizado:hoje()};
     veic.unshift(v);aberto.add(v.id);save();renderAll();
     const campo=els.veicList.querySelector('details[data-id="'+v.id+'"] input[data-k="nome"]');
     if(campo)campo.focus();
   });
-  $('addFinBtn').addEventListener('click',()=>{
+  $('addFinBtn').addEventListener('click',e=>{
+    e.preventDefault();
+    $('secFin').open=true;
     const fc={id:uid('f'),nome:'',tipo:'conta',valor:0,moeda:'BRL',notas:'',anexos:{},extratos:[],atualizado:hoje()};
     fin.unshift(fc);aberto.add(fc.id);save();renderAll();
     const campo=els.finList.querySelector('details[data-id="'+fc.id+'"] input[data-k="nome"]');
     if(campo)campo.focus();
   });
-  $('addOutroBtn').addEventListener('click',()=>{
+  $('addOutroBtn').addEventListener('click',e=>{
+    e.preventDefault();
+    $('secOutros').open=true;
     const o={id:uid('o'),nome:'',categoria:'',valor:0,localizacao:'',compraData:'',compraValor:0,
       vendedor:'',notaFiscal:'',notas:'',anexos:{},atualizado:hoje()};
     outros.unshift(o);aberto.add(o.id);save();renderAll();
@@ -1452,6 +1465,14 @@
   });
 
   // ---------- init ----------
+  ['secImoveis','secVeic','secFin','secOutros'].forEach(id=>{
+    const el=$(id);
+    try{if(localStorage.getItem('patrimonio_sec_'+id)==='0')el.open=false;}catch(e){}
+    el.addEventListener('toggle',()=>{
+      try{localStorage.setItem('patrimonio_sec_'+id,el.open?'1':'0');}catch(e){}
+    });
+  });
+
   abrirDB().then(async()=>{
     await load();
     cambio=await idbGet('dados','cambio');
