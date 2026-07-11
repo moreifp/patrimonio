@@ -193,7 +193,8 @@
     <div style="font-size:44px;">🔐</div>
     <h1>Patrimônio</h1>
     <p id="lockMsg">Digite a senha para abrir</p>
-    <input type="password" id="lockInput" autocomplete="current-password">
+    <input type="password" id="lockInput" placeholder="senha" autocomplete="current-password">
+    <input type="password" id="lockInput2" placeholder="repita a senha" style="display:none;">
     <button class="btn-primary" id="lockEnterBtn">Entrar</button>
   </div>
 </div>
@@ -1495,8 +1496,18 @@
 
   // ---------- init ----------
   // ---------- senha geral do app ----------
-  function mostrarLock(){
-    $('lockMsg').textContent='Digite a senha para abrir';
+  let lockModo='entrar'; // 'entrar' | 'criar'
+  function mostrarLock(modo){
+    lockModo=modo||'entrar';
+    if(lockModo==='criar'){
+      $('lockMsg').textContent='Primeira vez aqui: crie a senha do aplicativo';
+      $('lockInput2').style.display='block';
+      $('lockEnterBtn').textContent='Criar senha';
+    } else {
+      $('lockMsg').textContent='Digite a senha para abrir';
+      $('lockInput2').style.display='none';
+      $('lockEnterBtn').textContent='Entrar';
+    }
     $('lockScreen').style.display='flex';
     setTimeout(()=>$('lockInput').focus(),150);
   }
@@ -1504,6 +1515,22 @@
   async function tentarEntrar(){
     const s=$('lockInput').value;
     if(!s)return;
+    if(lockModo==='criar'){
+      const s2=$('lockInput2').value;
+      if(s!==s2){
+        $('lockMsg').textContent='As senhas não coincidem — tente de novo';
+        $('lockInput').value='';$('lockInput2').value='';
+        $('lockInput').focus();
+        return;
+      }
+      senhaApp=await hashSenha(s,'app');
+      try{localStorage.removeItem('patrimonio_sem_senha');}catch(e){}
+      save();atualizarLockBtn();
+      $('lockInput').value='';$('lockInput2').value='';
+      esconderLock();
+      alert('Senha criada! Será pedida sempre que o app abrir.\nGuarde-a bem — não há recuperação (só um Backup ZIP restaura o acesso).');
+      return;
+    }
     if(await hashSenha(s,'app')===senhaApp){
       $('lockInput').value='';
       esconderLock();
@@ -1515,6 +1542,7 @@
   }
   $('lockEnterBtn').addEventListener('click',tentarEntrar);
   $('lockInput').addEventListener('keydown',e=>{if(e.key==='Enter')tentarEntrar();});
+  $('lockInput2').addEventListener('keydown',e=>{if(e.key==='Enter')tentarEntrar();});
 
   function atualizarLockBtn(){
     $('appLockBtn').textContent=senhaApp?'🔐 Senha do app: ativa':'🔐 Senha do app';
@@ -1527,6 +1555,7 @@
         const s2=prompt('Repita a senha:');
         if(s1!==s2){alert('As senhas não coincidem.');return;}
         senhaApp=await hashSenha(s1,'app');
+        try{localStorage.removeItem('patrimonio_sem_senha');}catch(e){}
         save();atualizarLockBtn();
         alert('Senha ativada — será pedida ao abrir o app.\n\nGuarde-a bem: NÃO há recuperação. Se esquecer, só um Backup ZIP antigo (sem senha) recupera o acesso.');
       } else {
@@ -1535,7 +1564,11 @@
         if(await hashSenha(s,'app')!==senhaApp){alert('Senha incorreta.');return;}
         const nova=prompt('Nova senha (deixe vazio para REMOVER):','');
         if(nova==null)return;
-        if(nova===''){senhaApp=null;alert('Senha do app removida.');}
+        if(nova===''){
+          senhaApp=null;
+          try{localStorage.setItem('patrimonio_sem_senha','1');}catch(e){}
+          alert('Senha do app removida — não será mais pedida ao abrir.');
+        }
         else{senhaApp=await hashSenha(nova,'app');alert('Senha alterada.');}
         save();atualizarLockBtn();
       }
@@ -1555,7 +1588,12 @@
     cambio=await idbGet('dados','cambio');
     renderAll();
     atualizarLockBtn();
-    if(senhaApp)mostrarLock();else esconderLock();
+    if(senhaApp)mostrarLock('entrar');
+    else{
+      let semSenha=false;
+      try{semSenha=localStorage.getItem('patrimonio_sem_senha')==='1';}catch(e){}
+      if(semSenha)esconderLock();else mostrarLock('criar');
+    }
     atualizarCambio();
   });
 })();
