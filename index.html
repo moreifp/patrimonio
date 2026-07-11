@@ -237,12 +237,15 @@
   <div class="controls-row" style="justify-content:center;">
     <button class="btn-secondary small" id="exportBtn">⤓ Exportar CSV</button>
     <button class="btn-secondary small" id="backupBtn">⤓ Backup ZIP (dados + arquivos)</button>
+    <button class="btn-secondary small" id="restoreBtn">⤒ Restaurar ZIP</button>
+    <input type="file" id="restoreFile" accept=".zip,application/zip" style="display:none">
     <button class="btn-danger small" id="wipeBtn">Apagar tudo</button>
   </div>
 
   <footer>
     Dados e arquivos ficam no banco interno do navegador (IndexedDB) — comporta uma base grande e nada é enviado para a internet.<br>
-    Faça o backup ZIP de tempos em tempos: ele contém todos os dados e todos os arquivos anexados.
+    Faça o backup ZIP de tempos em tempos: ele contém todos os dados e todos os arquivos anexados.<br>
+    Para usar no notebook e no desktop: gere o Backup ZIP em um computador, leve o arquivo (nuvem ou pendrive) e use “Restaurar ZIP” no outro.
   </footer>
 </div>
 
@@ -446,8 +449,12 @@
   function anexosZone(secao,rotulo){
     return '<div class="field wide" data-anexos="'+secao+'"><label>'+rotulo+'</label>'+
       '<div class="anexo-list"></div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+
       '<button type="button" class="btn-secondary small" data-addanexo="'+secao+'">📎 Anexar arquivo</button>'+
-      '<input type="file" multiple style="display:none" data-fileinput="'+secao+'"></div>';
+      '<button type="button" class="btn-secondary small" data-addfoto="'+secao+'">📷 Tirar foto</button>'+
+      '</div>'+
+      '<input type="file" multiple style="display:none" data-fileinput="'+secao+'">'+
+      '<input type="file" accept="image/*" capture="environment" style="display:none" data-fotoinput="'+secao+'"></div>';
   }
 
   // ---------- cards ----------
@@ -559,7 +566,9 @@
           '<div class="extrato-add">'+
             '<input type="month" data-extrato-mes>'+
             '<button type="button" class="btn-secondary small" data-extrato-add>📎 Anexar extrato</button>'+
+            '<button type="button" class="btn-secondary small" data-extrato-foto>📷 Foto</button>'+
             '<input type="file" multiple style="display:none" data-extrato-file>'+
+            '<input type="file" accept="image/*" capture="environment" style="display:none" data-extrato-fotofile>'+
           '</div>'+
           '<div class="extrato-list"></div>'+
         '</div>'+
@@ -674,32 +683,51 @@
   }
 
   // ---------- anexos genéricos ----------
+  function nomeArquivo(file){
+    if(file.name&&!/^image\.(jpe?g|png|heic)$/i.test(file.name))return file.name;
+    const d=new Date();
+    const ts=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'_'+
+      String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+String(d.getSeconds()).padStart(2,'0');
+    const ext=(file.type||'').includes('png')?'png':'jpg';
+    return 'foto_'+ts+'.'+ext;
+  }
+  async function adicionarArquivos(files,obj,secao,card){
+    if(!obj.anexos)obj.anexos={};
+    if(!obj.anexos[secao])obj.anexos[secao]=[];
+    for(const file of Array.from(files)){
+      if(file.size>MAX_ARQ){alert('"'+file.name+'" é muito grande (máx. 50 MB).');continue;}
+      const id=uid('x');
+      try{
+        await salvarArquivo(id,file);
+        obj.anexos[secao].push({id,nome:nomeArquivo(file),tipo:file.type||'',tam:file.size});
+      }catch(e){
+        alert('Não foi possível salvar "'+file.name+'" — o armazenamento pode estar cheio.');
+      }
+    }
+    obj.atualizado=hoje();
+    save();
+    renderAnexos(card,obj,secao);
+  }
   function wireAnexos(card,obj){
     card.querySelectorAll('[data-addanexo]').forEach(btn=>{
       const secao=btn.dataset.addanexo;
       const input=card.querySelector('input[data-fileinput="'+secao+'"]');
+      const fotoBtn=card.querySelector('[data-addfoto="'+secao+'"]');
+      const fotoInput=card.querySelector('input[data-fotoinput="'+secao+'"]');
       btn.addEventListener('click',()=>{
         if(!db){alert('Este navegador não suporta armazenamento de arquivos.');return;}
         input.click();
       });
-      input.addEventListener('change',async()=>{
-        if(!obj.anexos)obj.anexos={};
-        if(!obj.anexos[secao])obj.anexos[secao]=[];
-        for(const file of Array.from(input.files)){
-          if(file.size>MAX_ARQ){alert('"'+file.name+'" é muito grande (máx. 50 MB).');continue;}
-          const id=uid('x');
-          try{
-            await salvarArquivo(id,file);
-            obj.anexos[secao].push({id,nome:file.name,tipo:file.type||'',tam:file.size});
-          }catch(e){
-            alert('Não foi possível salvar "'+file.name+'" — o armazenamento pode estar cheio.');
-          }
-        }
-        input.value='';
-        obj.atualizado=hoje();
-        save();
-        renderAnexos(card,obj,secao);
+      if(fotoBtn&&fotoInput)fotoBtn.addEventListener('click',()=>{
+        if(!db){alert('Este navegador não suporta armazenamento de arquivos.');return;}
+        fotoInput.click();
       });
+      const trata=inp=>async()=>{
+        await adicionarArquivos(inp.files,obj,secao,card);
+        inp.value='';
+      };
+      input.addEventListener('change',trata(input));
+      if(fotoInput)fotoInput.addEventListener('change',trata(fotoInput));
       renderAnexos(card,obj,secao);
     });
   }
@@ -763,36 +791,42 @@
     const mesInput=card.querySelector('[data-extrato-mes]');
     const addBtn=card.querySelector('[data-extrato-add]');
     const fileInput=card.querySelector('[data-extrato-file]');
+    const fotoBtn=card.querySelector('[data-extrato-foto]');
+    const fotoInput=card.querySelector('[data-extrato-fotofile]');
     // mês padrão: mês passado
     const d=new Date();d.setMonth(d.getMonth()-1);
     mesInput.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-    addBtn.addEventListener('click',()=>{
+    const abre=inp=>()=>{
       if(!db){alert('Este navegador não suporta armazenamento de arquivos.');return;}
       if(!mesInput.value){alert('Escolha o mês do extrato.');return;}
-      fileInput.click();
-    });
-    fileInput.addEventListener('change',async()=>{
+      inp.click();
+    };
+    addBtn.addEventListener('click',abre(fileInput));
+    if(fotoBtn&&fotoInput)fotoBtn.addEventListener('click',abre(fotoInput));
+    const processa=inp=>async()=>{
       const mes=mesInput.value;
       if(!fc.extratos)fc.extratos=[];
       let entrada=fc.extratos.find(e=>e.mes===mes);
       if(!entrada){entrada={mes,anexos:[]};fc.extratos.push(entrada);}
-      for(const file of Array.from(fileInput.files)){
+      for(const file of Array.from(inp.files)){
         if(file.size>MAX_ARQ){alert('"'+file.name+'" é muito grande (máx. 50 MB).');continue;}
         const id=uid('x');
         try{
           await salvarArquivo(id,file);
-          entrada.anexos.push({id,nome:file.name,tipo:file.type||'',tam:file.size});
+          entrada.anexos.push({id,nome:nomeArquivo(file),tipo:file.type||'',tam:file.size});
         }catch(e){
           alert('Não foi possível salvar "'+file.name+'".');
         }
       }
-      fileInput.value='';
+      inp.value='';
       fc.extratos.sort((a,b)=>a.mes<b.mes?1:-1);
       fc.atualizado=hoje();
       save();
       renderExtratos(card,fc);
       atualizarResumo(card,fc,'fin');
-    });
+    };
+    fileInput.addEventListener('change',processa(fileInput));
+    if(fotoInput)fotoInput.addEventListener('change',processa(fotoInput));
     renderExtratos(card,fc);
   }
 
@@ -1135,8 +1169,7 @@
     btn.disabled=true;btn.textContent='Gerando backup…';
     try{
       const entradas=[];
-      const dados={imoveis,veic,fin,outros,hist,exportadoEm:new Date().toISOString()};
-      entradas.push({nome:'dados.json',blob:new Blob([JSON.stringify(dados,null,2)],{type:'application/json'})});
+      const mapa={};
       const grupos=[
         ['imoveis',imoveis],['veiculos',veic],['financeiro',fin],['outros_bens',outros]
       ];
@@ -1153,6 +1186,7 @@
                 let n=1;
                 while(usados.has(caminho)){caminho=pasta+'/'+nomeItem+'/'+sec+'/'+n+'_'+limpaNome(ax.nome);n++;}
                 usados.add(caminho);
+                mapa[ax.id]=caminho;
                 entradas.push({nome:caminho,blob});
               }
             }
@@ -1166,18 +1200,95 @@
                 let n=1;
                 while(usados.has(caminho)){caminho=pasta+'/'+nomeItem+'/extratos/'+ext.mes+'_'+n+'_'+limpaNome(ax.nome);n++;}
                 usados.add(caminho);
+                mapa[ax.id]=caminho;
                 entradas.push({nome:caminho,blob});
               }
             }
           }
         }
       }
+      const dados={imoveis,veic,fin,outros,hist,mapa,exportadoEm:new Date().toISOString()};
+      entradas.unshift({nome:'dados.json',blob:new Blob([JSON.stringify(dados,null,2)],{type:'application/json'})});
       const zip=await gerarZip(entradas);
       baixar(zip,'patrimonio_backup_'+hoje()+'.zip');
     }catch(e){
       alert('Não foi possível gerar o backup: '+e.message);
     }finally{
       btn.disabled=false;btn.textContent='⤓ Backup ZIP (dados + arquivos)';
+    }
+  });
+
+  // ---------- restauração a partir do ZIP ----------
+  function lerZip(buf){
+    const dv=new DataView(buf);
+    const u8=new Uint8Array(buf);
+    let eocd=-1;
+    const lim=Math.max(0,buf.byteLength-70000);
+    for(let i=buf.byteLength-22;i>=lim;i--){
+      if(dv.getUint32(i,true)===0x06054b50){eocd=i;break;}
+    }
+    if(eocd<0)throw new Error('arquivo ZIP inválido');
+    const n=dv.getUint16(eocd+10,true);
+    let off=dv.getUint32(eocd+16,true);
+    const dec=new TextDecoder();
+    const entradas={};
+    for(let i=0;i<n;i++){
+      if(dv.getUint32(off,true)!==0x02014b50)throw new Error('ZIP corrompido');
+      const metodo=dv.getUint16(off+10,true);
+      const tam=dv.getUint32(off+24,true);
+      const nomeLen=dv.getUint16(off+28,true);
+      const extraLen=dv.getUint16(off+30,true);
+      const comLen=dv.getUint16(off+32,true);
+      const localOff=dv.getUint32(off+42,true);
+      const nome=dec.decode(u8.subarray(off+46,off+46+nomeLen));
+      if(metodo!==0)throw new Error('este ZIP não foi gerado pelo app');
+      const lNomeLen=dv.getUint16(localOff+26,true);
+      const lExtraLen=dv.getUint16(localOff+28,true);
+      const inicio=localOff+30+lNomeLen+lExtraLen;
+      entradas[nome]={inicio,tam};
+      off+=46+nomeLen+extraLen+comLen;
+    }
+    return {u8,entradas};
+  }
+
+  $('restoreBtn').addEventListener('click',()=>$('restoreFile').click());
+  $('restoreFile').addEventListener('change',async()=>{
+    const file=$('restoreFile').files[0];
+    $('restoreFile').value='';
+    if(!file)return;
+    if(!confirm('Restaurar o backup "'+file.name+'"?\n\nISSO SUBSTITUI todos os dados e arquivos atuais deste aparelho pelos do backup.'))return;
+    const btn=$('restoreBtn');
+    btn.disabled=true;btn.textContent='Restaurando…';
+    try{
+      const buf=await file.arrayBuffer();
+      const r=lerZip(buf);
+      const ent=r.entradas['dados.json'];
+      if(!ent)throw new Error('dados.json não encontrado no ZIP');
+      const dados=JSON.parse(new TextDecoder().decode(r.u8.subarray(ent.inicio,ent.inicio+ent.tam)));
+      await idbClear('arquivos');
+      imoveis=dados.imoveis||[];veic=dados.veic||[];fin=dados.fin||[];
+      outros=dados.outros||[];hist=dados.hist||[];
+      const tipos={};
+      for(const lista of [imoveis,veic,fin,outros])
+        for(const item of lista)
+          for(const ax of todosAnexos(item))tipos[ax.id]=ax.tipo||'';
+      const mapa=dados.mapa||{};
+      let ok=0,faltando=0;
+      for(const id of Object.keys(mapa)){
+        const e=r.entradas[mapa[id]];
+        if(!e){faltando++;continue;}
+        const blob=new Blob([r.u8.subarray(e.inicio,e.inicio+e.tam)],{type:tipos[id]||''});
+        await salvarArquivo(id,blob);
+        ok++;
+      }
+      aberto.clear();
+      save();
+      renderAll();
+      alert('Backup restaurado com sucesso: '+ok+' arquivo(s) recuperado(s).'+(faltando?'\n('+faltando+' arquivo(s) não encontrados no ZIP)':''));
+    }catch(e){
+      alert('Não foi possível restaurar: '+e.message);
+    }finally{
+      btn.disabled=false;btn.textContent='⤒ Restaurar ZIP';
     }
   });
 
