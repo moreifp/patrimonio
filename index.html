@@ -60,6 +60,7 @@
   .total-delta{font-size:13px;margin-top:6px;color:var(--cream-dim);}
   .total-delta .up{color:var(--up);}
   .total-delta .down{color:var(--down);}
+  .total-cambio{font-size:11px;color:var(--cream-dim);margin-top:6px;}
   .total-sub{display:flex;justify-content:center;gap:16px;margin-top:12px;font-size:12px;color:var(--cream-dim);flex-wrap:wrap;}
   .total-sub b{color:var(--cream);font-weight:600;}
 
@@ -178,6 +179,7 @@
     <div class="total-label">Patrimônio total</div>
     <div class="total-value" id="totalValue">R$ 0,00</div>
     <div class="total-delta" id="totalDelta"></div>
+    <div class="total-cambio" id="cambioInfo"></div>
     <div class="total-sub">
       <span>🏠 <b id="subImoveis">R$ 0</b></span>
       <span>🚗 <b id="subVeic">R$ 0</b></span>
@@ -271,6 +273,14 @@
     {id:'outro',nome:'Outro'},
   ];
   const FIN_CORES={conta:'#7fb0c9',poupanca:'#8ab4a8',investimento:'#9a8fc9',previdencia:'#c97b63',outro:'#c9c15f'};
+  const MOEDAS=[
+    {id:'BRL',simbolo:'R$'},
+    {id:'USD',simbolo:'US$'},
+    {id:'EUR',simbolo:'€'},
+    {id:'GBP',simbolo:'£'},
+    {id:'CHF',simbolo:'CHF'},
+  ];
+  let cambio=null; // {data:'YYYY-MM-DD', taxas:{USD: reais por 1 USD, ...}}
   const PALETA=['#c9a0c9','#c9c15f','#7fca8f','#c9739e','#a3a3c9','#c98f4a','#8ab4a8','#9a8fc9'];
 
   let imoveis=[], veic=[], fin=[], outros=[], hist=[];
@@ -279,7 +289,7 @@
 
   const $=id=>document.getElementById(id);
   const els={
-    totalValue:$('totalValue'),totalDelta:$('totalDelta'),
+    totalValue:$('totalValue'),totalDelta:$('totalDelta'),cambioInfo:$('cambioInfo'),
     subImoveis:$('subImoveis'),subVeic:$('subVeic'),subFin:$('subFin'),subOutros:$('subOutros'),
     subAluguel:$('subAluguel'),subAluguelWrap:$('subAluguelWrap'),
     imoveisList:$('imoveisList'),imoveisEmpty:$('imoveisEmpty'),imoveisCount:$('imoveisCount'),
@@ -397,12 +407,40 @@
     save();
   }
 
-  const totImoveis=()=>imoveis.reduce((a,b)=>a+(b.valor||0),0);
-  const totVeic=()=>veic.reduce((a,b)=>a+(b.valor||0),0);
-  const totFin=()=>fin.reduce((a,b)=>a+(b.valor||0),0);
-  const totOutros=()=>outros.reduce((a,b)=>a+(b.valor||0),0);
+  function fmtMoeda(v,m){
+    m=m||'BRL';
+    if(m==='BRL')return fmtBRL(v);
+    const md=MOEDAS.find(x=>x.id===m);
+    return (md?md.simbolo:m)+' '+v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  }
+  const taxaBRL=m=>{
+    if(!m||m==='BRL')return 1;
+    return (cambio&&cambio.taxas&&cambio.taxas[m])||null;
+  };
+  const emBRL=it=>(it.valor||0)*(taxaBRL(it.moeda)||1);
+  const totImoveis=()=>imoveis.reduce((a,b)=>a+emBRL(b),0);
+  const totVeic=()=>veic.reduce((a,b)=>a+emBRL(b),0);
+  const totFin=()=>fin.reduce((a,b)=>a+emBRL(b),0);
+  const totOutros=()=>outros.reduce((a,b)=>a+emBRL(b),0);
   const total=()=>totImoveis()+totVeic()+totFin()+totOutros();
-  const totAluguel=()=>imoveis.filter(i=>i.alugado).reduce((a,b)=>a+(b.aluguelValor||0),0);
+  const totAluguel=()=>imoveis.filter(i=>i.alugado).reduce((a,b)=>a+(b.aluguelValor||0)*(taxaBRL(b.moeda)||1),0);
+
+  // ---------- câmbio do dia (open.er-api.com, gratuito) ----------
+  async function atualizarCambio(){
+    try{
+      const r=await fetch('https://open.er-api.com/v6/latest/BRL');
+      const j=await r.json();
+      if(j&&j.rates){
+        const taxas={};
+        for(const m of MOEDAS){
+          if(m.id!=='BRL'&&j.rates[m.id])taxas[m.id]=1/j.rates[m.id];
+        }
+        cambio={data:hoje(),taxas};
+        idbPut('dados','cambio',cambio).catch(()=>{});
+        renderTotal();renderDonut();renderLine();
+      }
+    }catch(e){/* offline — usa a última cotação salva */}
+  }
 
   function snapshot(){
     const dia=hoje();
@@ -443,6 +481,20 @@
       const cls=diff>=0?'up':'down';
       els.totalDelta.innerHTML='<span class="'+cls+'">'+(diff>=0?'▲':'▼')+' '+fmtBRL(Math.abs(diff))+' ('+Math.abs(pct).toFixed(1).replace('.',',')+'%)</span> desde '+fmtDate(prev.dia);
     } else els.totalDelta.textContent='';
+    // moedas estrangeiras em uso
+    const usadas=new Set();
+    [...imoveis,...fin].forEach(i=>{if(i.moeda&&i.moeda!=='BRL')usadas.add(i.moeda);});
+    if(!usadas.size){els.cambioInfo.textContent='';}
+    else if(cambio&&cambio.taxas){
+      const partes=[...usadas].map(m=>{
+        const t=cambio.taxas[m];
+        const md=MOEDAS.find(x=>x.id===m)||{simbolo:m};
+        return t?('1 '+m+' = '+fmtBRL(t)):(m+': sem cotação');
+      });
+      els.cambioInfo.textContent='câmbio de '+fmtDate(cambio.data)+': '+partes.join(' · ');
+    } else {
+      els.cambioInfo.textContent='⚠ sem cotação — valores em outras moedas somados sem conversão';
+    }
   }
 
   // ---------- campos ----------
@@ -453,6 +505,11 @@
     if(tipo==='date')
       return '<div class="'+cls+'"><label>'+label+'</label><input type="date" data-k="'+k+'" value="'+esc(val||'')+'"></div>';
     return '<div class="'+cls+'"><label>'+label+'</label><input type="text" data-k="'+k+'" value="'+esc(val||'')+'"></div>';
+  }
+  function seletorMoeda(obj){
+    return '<div class="field"><label>Moeda</label><select data-k="moeda">'+
+      MOEDAS.map(m=>'<option value="'+m.id+'"'+((obj.moeda||'BRL')===m.id?' selected':'')+'>'+m.id+' ('+m.simbolo+')</option>').join('')+
+      '</select></div>';
   }
   function anexosZone(secao,rotulo){
     return '<div class="field wide" data-anexos="'+secao+'"><label>'+rotulo+'</label>'+
@@ -472,18 +529,19 @@
     if(aberto.has(im.id))d.open=true;
     const sub=[];
     if(im.localizacao)sub.push(im.localizacao);
-    if(im.alugado)sub.push('alugado por '+fmtBRL(im.aluguelValor||0)+'/mês');
+    if(im.alugado)sub.push('alugado por '+fmtMoeda(im.aluguelValor||0,im.moeda)+'/mês');
     d.innerHTML=
       '<summary>'+
         '<span class="item-title"><span class="item-dot" style="background:var(--imovel)"></span>'+
           '<span><span class="item-name">'+esc(im.nome||'Imóvel')+'</span>'+
           '<div class="item-sub">'+esc(sub.join(' · '))+'</div>'+
         '</span></span>'+
-        '<span><span class="item-value">'+fmtBRL(im.valor||0)+'</span><span class="chev">▶</span></span>'+
+        '<span><span class="item-value">'+fmtMoeda(im.valor||0,im.moeda)+'</span><span class="chev">▶</span></span>'+
       '</summary>'+
       '<div class="item-body"><div class="fields">'+
         f('text','nome','Nome do imóvel',im.nome)+
-        f('valor','valor','Valor estimado (R$)',fmtNum(im.valor||0))+
+        f('valor','valor','Valor estimado',fmtNum(im.valor||0))+
+        seletorMoeda(im)+
         f('text','localizacao','Localização / endereço',im.localizacao,'wide')+
         '<div class="subsection">Escritura e registro</div>'+
         f('text','registro','Nº registro / matrícula',im.registro)+
@@ -496,7 +554,7 @@
         '<div class="field"><label>Situação</label><select data-k="alugado">'+
           '<option value="nao"'+(im.alugado?'':' selected')+'>Não alugado</option>'+
           '<option value="sim"'+(im.alugado?' selected':'')+'>Alugado</option></select></div>'+
-        f('valor','aluguelValor','Aluguel mensal (R$)',fmtNum(im.aluguelValor||0))+
+        f('valor','aluguelValor','Aluguel mensal (moeda do imóvel)',fmtNum(im.aluguelValor||0))+
         f('text','inquilino','Inquilino',im.inquilino)+
         f('date','contratoInicio','Início do contrato',im.contratoInicio)+
         f('date','contratoFim','Fim do contrato',im.contratoFim)+
@@ -560,14 +618,15 @@
           '<span><span class="item-name">'+esc(fc.nome||'Conta')+'</span>'+
           '<div class="item-sub">'+tipoNome+(nExtratos?' · '+nExtratos+' extrato'+(nExtratos>1?'s':''):'')+' · atualizado '+fmtDate(fc.atualizado)+'</div>'+
         '</span></span>'+
-        '<span><span class="item-value">'+fmtBRL(fc.valor||0)+'</span><span class="chev">▶</span></span>'+
+        '<span><span class="item-value">'+fmtMoeda(fc.valor||0,fc.moeda)+'</span><span class="chev">▶</span></span>'+
       '</summary>'+
       '<div class="item-body"><div class="fields">'+
         f('text','nome','Instituição / nome',fc.nome)+
         '<div class="field"><label>Tipo</label><select data-k="tipo">'+
           FIN_TIPOS.map(t=>'<option value="'+t.id+'"'+(fc.tipo===t.id?' selected':'')+'>'+t.nome+'</option>').join('')+
         '</select></div>'+
-        f('valor','valor','Saldo / valor atual (R$)',fmtNum(fc.valor||0))+
+        f('valor','valor','Saldo / valor atual',fmtNum(fc.valor||0))+
+        seletorMoeda(fc)+
         '<div class="subsection" style="color:var(--fin);">Extratos mensais</div>'+
         '<div class="field wide">'+
           '<label>Adicionar extrato do mês</label>'+
@@ -637,6 +696,8 @@
           obj[k]=v;el.value=fmtNum(v);mudouValor=true;
         } else if(k==='alugado'){
           obj.alugado=el.value==='sim';mudouValor=true;
+        } else if(k==='moeda'){
+          obj.moeda=el.value;mudouValor=true;
         } else obj[k]=el.value;
         obj.atualizado=hoje();
         if(mudouValor){snapshot();}else save();
@@ -667,13 +728,13 @@
 
   function atualizarResumo(card,obj,tipo){
     card.querySelector('.item-name').textContent=obj.nome||(tipo==='imovel'?'Imóvel':(tipo==='veic'?'Veículo':(tipo==='fin'?'Conta':'Bem')));
-    card.querySelector('.item-value').textContent=fmtBRL(obj.valor||0);
+    card.querySelector('.item-value').textContent=fmtMoeda(obj.valor||0,obj.moeda);
     const subEl=card.querySelector('.item-sub');
     if(!subEl)return;
     if(tipo==='imovel'){
       const sub=[];
       if(obj.localizacao)sub.push(obj.localizacao);
-      if(obj.alugado)sub.push('alugado por '+fmtBRL(obj.aluguelValor||0)+'/mês');
+      if(obj.alugado)sub.push('alugado por '+fmtMoeda(obj.aluguelValor||0,obj.moeda)+'/mês');
       subEl.textContent=sub.join(' · ');
     } else if(tipo==='veic'){
       const sub=[];
@@ -939,14 +1000,14 @@
     if(totImoveis()>0)dados.push({nome:'Imóveis',cor:'#cfa94f',v:totImoveis()});
     if(totVeic()>0)dados.push({nome:'Veículos',cor:'#9fbf7f',v:totVeic()});
     for(const ft of FIN_TIPOS){
-      const s=fin.filter(x=>x.tipo===ft.id).reduce((a,b)=>a+(b.valor||0),0);
+      const s=fin.filter(x=>x.tipo===ft.id).reduce((a,b)=>a+emBRL(b),0);
       if(s>0)dados.push({nome:ft.nome,cor:FIN_CORES[ft.id],v:s});
     }
     // outros: agrupa por categoria
     const porCat={};
     outros.forEach(o=>{
       const c=o.categoria||'Outros bens';
-      porCat[c]=(porCat[c]||0)+(o.valor||0);
+      porCat[c]=(porCat[c]||0)+emBRL(o);
     });
     let pi=0;
     for(const c of Object.keys(porCat)){
@@ -1059,7 +1120,7 @@
 
   // ---------- adicionar itens ----------
   $('addImovelBtn').addEventListener('click',()=>{
-    const im={id:uid('i'),nome:'',valor:0,localizacao:'',registro:'',cartorio:'',iptuNum:'',iptuValor:0,
+    const im={id:uid('i'),nome:'',valor:0,moeda:'BRL',localizacao:'',registro:'',cartorio:'',iptuNum:'',iptuValor:0,
       proprietario:'',alugado:false,aluguelValor:0,inquilino:'',contratoInicio:'',contratoFim:'',notas:'',anexos:{},atualizado:hoje()};
     imoveis.unshift(im);aberto.add(im.id);save();renderAll();
     const campo=els.imoveisList.querySelector('details[data-id="'+im.id+'"] input[data-k="nome"]');
@@ -1073,7 +1134,7 @@
     if(campo)campo.focus();
   });
   $('addFinBtn').addEventListener('click',()=>{
-    const fc={id:uid('f'),nome:'',tipo:'conta',valor:0,notas:'',anexos:{},extratos:[],atualizado:hoje()};
+    const fc={id:uid('f'),nome:'',tipo:'conta',valor:0,moeda:'BRL',notas:'',anexos:{},extratos:[],atualizado:hoje()};
     fin.unshift(fc);aberto.add(fc.id);save();renderAll();
     const campo=els.finList.querySelector('details[data-id="'+fc.id+'"] input[data-k="nome"]');
     if(campo)campo.focus();
@@ -1090,9 +1151,9 @@
   $('exportBtn').addEventListener('click',()=>{
     if(imoveis.length===0&&veic.length===0&&fin.length===0&&outros.length===0){alert('Nada para exportar ainda.');return;}
     const q=x=>'"'+String(x||'').replace(/"/g,'""')+'"';
-    let csv='IMOVEIS\nNome,Localizacao,Valor,Registro,Cartorio,Inscricao IPTU,IPTU anual,Proprietario,Alugado,Aluguel mensal,Inquilino,Inicio contrato,Fim contrato,Notas,Arquivos\n';
+    let csv='IMOVEIS\nNome,Localizacao,Valor,Moeda,Valor em BRL,Registro,Cartorio,Inscricao IPTU,IPTU anual,Proprietario,Alugado,Aluguel mensal,Inquilino,Inicio contrato,Fim contrato,Notas,Arquivos\n';
     imoveis.forEach(i=>{
-      csv+=[q(i.nome),q(i.localizacao),(i.valor||0).toFixed(2),q(i.registro),q(i.cartorio),q(i.iptuNum),(i.iptuValor||0).toFixed(2),
+      csv+=[q(i.nome),q(i.localizacao),(i.valor||0).toFixed(2),i.moeda||'BRL',emBRL(i).toFixed(2),q(i.registro),q(i.cartorio),q(i.iptuNum),(i.iptuValor||0).toFixed(2),
         q(i.proprietario),i.alugado?'sim':'nao',(i.aluguelValor||0).toFixed(2),q(i.inquilino),i.contratoInicio||'',i.contratoFim||'',q(i.notas),todosAnexos(i).length].join(',')+'\n';
     });
     csv+='\nVEICULOS\nModelo,Valor,Placa,Ano,Renavam,IPVA anual,Data compra,Valor compra,Nota fiscal,Vendedor,Notas,Arquivos\n';
@@ -1100,10 +1161,10 @@
       csv+=[q(v.nome),(v.valor||0).toFixed(2),q(v.placa),q(v.ano),q(v.renavam),(v.ipvaValor||0).toFixed(2),
         v.compraData||'',(v.compraValor||0).toFixed(2),q(v.notaFiscal),q(v.vendedor),q(v.notas),todosAnexos(v).length].join(',')+'\n';
     });
-    csv+='\nFINANCEIRO\nNome,Tipo,Valor,Extratos arquivados,Notas,Arquivos,Atualizado\n';
+    csv+='\nFINANCEIRO\nNome,Tipo,Valor,Moeda,Valor em BRL,Extratos arquivados,Notas,Arquivos,Atualizado\n';
     fin.forEach(x=>{
       const tn=(FIN_TIPOS.find(t=>t.id===x.tipo)||{}).nome||x.tipo;
-      csv+=[q(x.nome),tn,(x.valor||0).toFixed(2),(x.extratos||[]).length,q(x.notas),todosAnexos(x).length,x.atualizado].join(',')+'\n';
+      csv+=[q(x.nome),tn,(x.valor||0).toFixed(2),x.moeda||'BRL',emBRL(x).toFixed(2),(x.extratos||[]).length,q(x.notas),todosAnexos(x).length,x.atualizado].join(',')+'\n';
     });
     csv+='\nOUTROS BENS\nNome,Categoria,Valor,Localizacao,Data compra,Valor compra,Vendedor,Nota fiscal,Notas,Arquivos\n';
     outros.forEach(o=>{
@@ -1323,7 +1384,9 @@
   // ---------- init ----------
   abrirDB().then(async()=>{
     await load();
+    cambio=await idbGet('dados','cambio');
     renderAll();
+    atualizarCambio();
   });
 })();
 </script>
