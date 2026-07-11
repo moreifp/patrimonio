@@ -687,6 +687,11 @@
       if(card.open)aberto.add(obj.id);else aberto.delete(obj.id);
     });
     card.querySelectorAll('[data-k]').forEach(el=>{
+      if(el.dataset.valor){
+        // ao tocar no campo, seleciona tudo: digitar substitui o valor em vez de acrescentar
+        el.addEventListener('focus',()=>{setTimeout(()=>el.select(),0);});
+        el.addEventListener('click',()=>{if(el.selectionStart===el.selectionEnd)el.select();});
+      }
       el.addEventListener('change',()=>{
         const k=el.dataset.k;
         let mudouValor=false;
