@@ -196,6 +196,8 @@
     <input type="password" id="lockInput" placeholder="senha" autocomplete="current-password">
     <input type="password" id="lockInput2" placeholder="repita a senha" style="display:none;">
     <button class="btn-primary" id="lockEnterBtn">Entrar</button>
+    <button class="btn-primary" id="googleBtn" style="display:none;">Entrar com Google</button>
+    <p id="lockSync" style="margin-top:14px;min-height:16px;"></p>
   </div>
 </div>
 <div class="wrap">
@@ -203,7 +205,8 @@
   <header>
     <div class="eyebrow">Banco de dados dos seus bens</div>
     <h1>Patrimônio</h1>
-    <p>Imóveis, veículos, contas, extratos e outros bens — dados e documentos salvos apenas neste aparelho.</p>
+    <p>Imóveis, veículos, contas, extratos e outros bens — com documentos anexados.</p>
+    <p id="syncStatus" style="color:var(--gold);font-size:12px;margin-top:4px;min-height:14px;"></p>
   </header>
 
   <div class="total-card">
@@ -281,17 +284,32 @@
     <button class="btn-secondary small" id="restoreBtn">⤒ Restaurar ZIP</button>
     <button class="btn-secondary small" id="appLockBtn">🔐 Senha do app</button>
     <input type="file" id="restoreFile" accept=".zip,application/zip" style="display:none">
+    <button class="btn-secondary small" id="logoutBtn" style="display:none;">↪ Sair da conta</button>
     <button class="btn-danger small" id="wipeBtn">Apagar tudo</button>
   </div>
 
   <footer>
-    Dados e arquivos ficam no banco interno do navegador (IndexedDB) — comporta uma base grande e nada é enviado para a internet.<br>
+    Seus dados e anexos são sincronizados na sua conta Google (Firebase) e ficam também em cache neste aparelho para uso offline.<br>
     Faça o backup ZIP de tempos em tempos: ele contém todos os dados e todos os arquivos anexados.<br>
-    Para usar no notebook e no desktop: gere o Backup ZIP em um computador, leve o arquivo (nuvem ou pendrive) e use “Restaurar ZIP” no outro.<br>
     O cadeado 🔒 pede senha para abrir o item na tela — é uma proteção de privacidade, não criptografia dos dados no aparelho.
   </footer>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-storage-compat.js"></script>
+<script>
+// Configuração do projeto Firebase (preencher com o firebaseConfig do console)
+window.FIREBASE_CONFIG={
+  apiKey:"AIzaSyBOY5RoU0u-wqWo5DDvNPXp7NtgFLNspcE",
+  authDomain:"patrimonio-fausto.firebaseapp.com",
+  projectId:"patrimonio-fausto",
+  storageBucket:"patrimonio-fausto.firebasestorage.app",
+  messagingSenderId:"695542775416",
+  appId:"1:695542775416:web:90930a414b070ca06cf78d"
+};
+</script>
 <script>
 (function(){
   "use strict";
@@ -411,15 +429,168 @@
       tx.oncomplete=()=>res();tx.onerror=()=>res();
     });
   }
-  const salvarArquivo=(id,blob)=>idbPut('arquivos',id,blob);
-  const lerArquivo=id=>idbGet('arquivos',id);
-  const apagarArquivo=id=>idbDel('arquivos',id);
+  // ---------- nuvem (Firebase: login Google + Firestore + Storage) ----------
+  const CLOUD=window.FIREBASE_CONFIG||null;
+  let fbAuth=null,fbDb=null,fbStorage=null,fbUser=null;
+  let unsubSnapshot=null,salvoEm=null,pushTimer=null;
+  const CLIENTE=uid('c'); // identifica este aparelho/aba nas gravações
+  let pendentes=new Set(); // anexos ainda não enviados à nuvem
 
-  function save(){
-    const estado={imoveis,veic,fin,outros,hist,senhaApp,salvoEm:new Date().toISOString()};
-    idbPut('dados','estado',estado).catch(()=>{});
+  function iniciarFirebase(){
+    if(!CLOUD||!CLOUD.apiKey||!window.firebase)return false;
+    try{
+      firebase.initializeApp(CLOUD);
+      fbAuth=firebase.auth();
+      fbDb=firebase.firestore();
+      fbStorage=firebase.storage();
+      return true;
+    }catch(e){return false;}
+  }
+  const nuvemOk=()=>!!(CLOUD&&fbUser&&fbDb);
+  const docEstado=()=>fbDb.collection('users').doc(fbUser.uid).collection('dados').doc('estado');
+  const arqRef=id=>fbStorage.ref('users/'+fbUser.uid+'/arquivos/'+id);
+  function setSync(msg){
+    const s=$('syncStatus');if(s)s.textContent=msg||'';
+    const l=$('lockSync');if(l)l.textContent=msg||'';
+  }
+  const estadoAtual=()=>({imoveis,veic,fin,outros,hist,senhaApp,salvoEm,cliente:CLIENTE});
+
+  function agendarPush(){
+    if(!nuvemOk())return;
+    clearTimeout(pushTimer);
+    pushTimer=setTimeout(pushEstado,1200);
+  }
+  async function pushEstado(){
+    if(!nuvemOk())return;
+    try{
+      await docEstado().set(JSON.parse(JSON.stringify(estadoAtual())));
+      setSync('☁ sincronizado · '+(fbUser.email||''));
+    }catch(e){
+      setSync('⚠ sem conexão — sincronizo quando voltar');
+      clearTimeout(pushTimer);
+      pushTimer=setTimeout(pushEstado,15000);
+    }
+  }
+  function adotarEstado(d){
+    imoveis=d.imoveis||[];veic=d.veic||[];fin=d.fin||[];outros=d.outros||[];hist=d.hist||[];
+    senhaApp=('senhaApp' in d)?(d.senhaApp||null):senhaApp;
+    salvoEm=d.salvoEm||new Date().toISOString();
+    atualizarLockBtn();
+  }
+  function ouvirNuvem(){
+    if(unsubSnapshot)unsubSnapshot();
+    unsubSnapshot=docEstado().onSnapshot(doc=>{
+      if(!doc.exists)return;
+      const d=doc.data();
+      if(d.cliente===CLIENTE)return;
+      if(salvoEm&&d.salvoEm&&d.salvoEm<=salvoEm)return;
+      adotarEstado(d);
+      salvarLocal();
+      renderAll();
+      setSync('☁ atualizado por outro aparelho · '+(fbUser.email||''));
+    },()=>{});
+  }
+  async function carregarPendentes(){
+    const p=await idbGet('dados','pendentes');
+    pendentes=new Set(p||[]);
+  }
+  const salvarPendentes=()=>idbPut('dados','pendentes',[...pendentes]).catch(()=>{});
+  async function tentarPendentes(){
+    if(!nuvemOk()||!pendentes.size)return;
+    for(const id of [...pendentes]){
+      const blob=await idbGet('arquivos',id);
+      if(!blob){pendentes.delete(id);continue;}
+      try{await arqRef(id).put(blob);pendentes.delete(id);}catch(e){}
+    }
+    salvarPendentes();
+  }
+  async function subirTodosAnexos(){
+    if(!nuvemOk())return;
+    const todos=[];
+    for(const lista of [imoveis,veic,fin,outros])
+      for(const item of lista)
+        for(const ax of todosAnexos(item))todos.push(ax);
+    let n=0;
+    for(const ax of todos){
+      const blob=await idbGet('arquivos',ax.id);
+      if(!blob)continue;
+      n++;setSync('☁ enviando anexos… '+n+'/'+todos.length);
+      try{await arqRef(ax.id).put(blob,{contentType:ax.tipo||''});pendentes.delete(ax.id);}
+      catch(e){pendentes.add(ax.id);}
+    }
+    salvarPendentes();
+    setSync('☁ sincronizado · '+(fbUser.email||''));
+  }
+  async function sincronizarInicial(){
+    setSync('☁ sincronizando…');
+    let remoto=null;
+    try{
+      const d=await docEstado().get();
+      if(d.exists)remoto=d.data();
+    }catch(e){
+      setSync('⚠ sem conexão — usando dados deste aparelho');
+      return;
+    }
+    const temLocal=imoveis.length||veic.length||outros.length||hist.length||
+      fin.some(f=>(f.valor||0)!==0||f.notas||(f.extratos||[]).length||Object.keys(f.anexos||{}).length);
+    if(remoto&&(!temLocal||!salvoEm||(remoto.salvoEm&&remoto.salvoEm>salvoEm))){
+      adotarEstado(remoto);
+      salvarLocal();
+      renderAll();
+    } else if(temLocal){
+      salvoEm=salvoEm||new Date().toISOString();
+      await pushEstado();
+      if(!remoto)await subirTodosAnexos(); // primeira migração: envia todos os arquivos
+    }
+    ouvirNuvem();
+    setSync('☁ conectado · '+(fbUser.email||''));
+  }
+  async function limparNuvem(){
+    if(!nuvemOk())return;
+    try{await docEstado().delete();}catch(e){}
+    try{
+      const l=await fbStorage.ref('users/'+fbUser.uid+'/arquivos').listAll();
+      for(const it of l.items){try{await it.delete();}catch(e){}}
+    }catch(e){}
+  }
+
+  // arquivos: IndexedDB é o cache local; Storage é a cópia na nuvem
+  async function salvarArquivo(id,blob){
+    await idbPut('arquivos',id,blob);
+    if(CLOUD){
+      pendentes.add(id);salvarPendentes();
+      if(nuvemOk())
+        arqRef(id).put(blob).then(()=>{pendentes.delete(id);salvarPendentes();}).catch(()=>{});
+    }
+  }
+  async function lerArquivo(id){
+    const local=await idbGet('arquivos',id);
+    if(local)return local;
+    if(!nuvemOk())return null;
+    try{
+      const url=await arqRef(id).getDownloadURL();
+      const r=await fetch(url);
+      if(!r.ok)return null;
+      const blob=await r.blob();
+      idbPut('arquivos',id,blob).catch(()=>{});
+      return blob;
+    }catch(e){return null;}
+  }
+  async function apagarArquivo(id){
+    await idbDel('arquivos',id);
+    pendentes.delete(id);salvarPendentes();
+    if(nuvemOk())arqRef(id).delete().catch(()=>{});
+  }
+
+  function salvarLocal(){
+    idbPut('dados','estado',estadoAtual()).catch(()=>{});
     // espelho leve do histórico (recuperação de emergência)
     try{localStorage.setItem('patrimonio_hist_v1',JSON.stringify(hist));}catch(e){}
+  }
+  function save(){
+    salvoEm=new Date().toISOString();
+    salvarLocal();
+    agendarPush();
   }
 
   async function load(){
@@ -428,6 +599,7 @@
       imoveis=estado.imoveis||[];veic=estado.veic||[];
       fin=estado.fin||[];outros=estado.outros||[];hist=estado.hist||[];
       senhaApp=estado.senhaApp||null;
+      salvoEm=estado.salvoEm||null;
       return;
     }
     // migração da versão anterior (localStorage)
@@ -1466,6 +1638,7 @@
       aberto.clear();
       save();
       renderAll();
+      if(nuvemOk())subirTodosAnexos(); // reenvia os arquivos restaurados para a nuvem
       alert('Backup restaurado com sucesso: '+ok+' arquivo(s) recuperado(s).'+(faltando?'\n('+faltando+' arquivo(s) não encontrados no ZIP)':''));
     }catch(e){
       alert('Não foi possível restaurar: '+e.message);
@@ -1482,12 +1655,16 @@
   }
 
   $('wipeBtn').addEventListener('click',async()=>{
-    if(!confirm('Apagar TODOS os bens, contas, extratos, histórico e arquivos? Isso não pode ser desfeito.'))return;
+    if(!confirm('Apagar TODOS os bens, contas, extratos, histórico e arquivos'+(nuvemOk()?' — deste aparelho E da nuvem':'')+'? Isso não pode ser desfeito.'))return;
     if(!confirm('Tem certeza? Considere fazer um Backup ZIP antes.'))return;
+    if(unsubSnapshot){unsubSnapshot();unsubSnapshot=null;}
+    clearTimeout(pushTimer);
+    await limparNuvem();
     imoveis=[];veic=[];fin=[];outros=[];hist=[];aberto.clear();
-    senhaApp=null;atualizarLockBtn();
+    senhaApp=null;salvoEm=null;pendentes=new Set();atualizarLockBtn();
     await idbClear('arquivos');
     await idbClear('dados');
+    if(nuvemOk())ouvirNuvem();
     try{
       ['patrimonio_imoveis_v1','patrimonio_veic_v1','patrimonio_fin_v1','patrimonio_hist_v1'].forEach(k=>localStorage.removeItem(k));
     }catch(e){}
@@ -1496,10 +1673,17 @@
 
   // ---------- init ----------
   // ---------- senha geral do app ----------
-  let lockModo='entrar'; // 'entrar' | 'criar'
+  let lockModo='entrar'; // 'entrar' | 'criar' | 'google'
   function mostrarLock(modo){
     lockModo=modo||'entrar';
-    if(lockModo==='criar'){
+    const google=lockModo==='google';
+    $('lockInput').style.display=google?'none':'block';
+    $('lockEnterBtn').style.display=google?'none':'block';
+    $('googleBtn').style.display=google?'block':'none';
+    if(google){
+      $('lockMsg').textContent='Entre com sua conta Google para acessar seus dados em qualquer aparelho';
+      $('lockInput2').style.display='none';
+    } else if(lockModo==='criar'){
       $('lockMsg').textContent='Primeira vez aqui: crie a senha do aplicativo';
       $('lockInput2').style.display='block';
       $('lockEnterBtn').textContent='Criar senha';
@@ -1509,7 +1693,7 @@
       $('lockEnterBtn').textContent='Entrar';
     }
     $('lockScreen').style.display='flex';
-    setTimeout(()=>$('lockInput').focus(),150);
+    if(!google)setTimeout(()=>$('lockInput').focus(),150);
   }
   function esconderLock(){$('lockScreen').style.display='none';}
   async function tentarEntrar(){
@@ -1583,18 +1767,71 @@
     });
   });
 
-  abrirDB().then(async()=>{
-    await load();
-    cambio=await idbGet('dados','cambio');
+  // ---------- login Google ----------
+  $('googleBtn').addEventListener('click',async()=>{
+    const btn=$('googleBtn');
+    btn.disabled=true;
+    try{
+      const prov=new firebase.auth.GoogleAuthProvider();
+      try{await fbAuth.signInWithPopup(prov);}
+      catch(e){
+        // alguns navegadores bloqueiam o popup — tenta por redirecionamento
+        if(e&&(e.code==='auth/popup-blocked'||e.code==='auth/popup-closed-by-user'||e.code==='auth/cancelled-popup-request'||e.code==='auth/operation-not-supported-in-this-environment'))
+          await fbAuth.signInWithRedirect(prov);
+        else throw e;
+      }
+    }catch(e2){
+      alert('Não foi possível entrar: '+((e2&&e2.message)||e2));
+    }finally{btn.disabled=false;}
+  });
+  $('logoutBtn').addEventListener('click',async()=>{
+    if(!confirm('Sair da conta?\n\nOs dados guardados neste aparelho serão removidos — eles continuam salvos na nuvem e voltam quando você entrar de novo.'))return;
+    if(unsubSnapshot){unsubSnapshot();unsubSnapshot=null;}
+    clearTimeout(pushTimer);
+    try{await fbAuth.signOut();}catch(e){}
+    await idbClear('arquivos');
+    await idbClear('dados');
+    imoveis=[];veic=[];fin=[];outros=[];hist=[];senhaApp=null;salvoEm=null;
+    pendentes=new Set();aberto.clear();desbloqueados.clear();
+    setSync('');
+    $('logoutBtn').style.display='none';
     renderAll();
-    atualizarLockBtn();
+  });
+
+  function depoisDoLogin(){
     if(senhaApp)mostrarLock('entrar');
     else{
       let semSenha=false;
       try{semSenha=localStorage.getItem('patrimonio_sem_senha')==='1';}catch(e){}
-      if(semSenha)esconderLock();else mostrarLock('criar');
+      if(semSenha||CLOUD)esconderLock();else mostrarLock('criar');
     }
+  }
+
+  abrirDB().then(async()=>{
+    await load();
+    cambio=await idbGet('dados','cambio');
+    await carregarPendentes();
+    renderAll();
+    atualizarLockBtn();
     atualizarCambio();
+    if(iniciarFirebase()){
+      mostrarLock('google');
+      fbAuth.onAuthStateChanged(async u=>{
+        fbUser=u||null;
+        if(u){
+          $('logoutBtn').style.display='inline-block';
+          await sincronizarInicial();
+          tentarPendentes();
+          depoisDoLogin();
+        } else {
+          $('logoutBtn').style.display='none';
+          if(unsubSnapshot){unsubSnapshot();unsubSnapshot=null;}
+          mostrarLock('google');
+        }
+      });
+    } else {
+      depoisDoLogin();
+    }
   });
 })();
 </script>
