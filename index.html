@@ -193,8 +193,8 @@
     <div style="font-size:44px;">🔐</div>
     <h1>Patrimônio</h1>
     <p id="lockMsg">Digite a senha para abrir</p>
-    <input type="password" id="lockInput" placeholder="senha" autocomplete="current-password">
-    <input type="password" id="lockInput2" placeholder="repita a senha" style="display:none;">
+    <input type="text" id="lockInput" placeholder="senha" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" name="pin-app" style="-webkit-text-security:disc;">
+    <input type="text" id="lockInput2" placeholder="repita a senha" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" name="pin-app-2" style="display:none;-webkit-text-security:disc;">
     <button class="btn-primary" id="lockEnterBtn">Entrar</button>
     <button class="btn-primary" id="googleBtn" style="display:none;">Entrar com Google</button>
     <p id="lockSync" style="margin-top:14px;min-height:16px;"></p>
@@ -224,7 +224,7 @@
   </div>
 
   <div class="busca-box">
-    <input type="search" id="busca" placeholder="🔍 Buscar por nome, endereço, placa, categoria…">
+    <input type="search" id="busca" placeholder="🔍 Buscar por nome, endereço, placa, categoria…" autocomplete="off" name="filtro-bens" spellcheck="false">
   </div>
 
   <details class="panel sec" id="secImoveis" open>
@@ -1695,7 +1695,14 @@ window.FIREBASE_CONFIG={
     $('lockScreen').style.display='flex';
     if(!google)setTimeout(()=>$('lockInput').focus(),150);
   }
-  function esconderLock(){$('lockScreen').style.display='none';}
+  function esconderLock(){
+    $('lockScreen').style.display='none';
+    // remove qualquer texto que o navegador tenha preenchido sozinho na busca
+    if(els.busca.value){
+      els.busca.value='';filtro='';
+      renderImoveis();renderVeic();renderFin();renderOutros();
+    }
+  }
   async function tentarEntrar(){
     const s=$('lockInput').value;
     if(!s)return;
