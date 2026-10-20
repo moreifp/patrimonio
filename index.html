@@ -155,6 +155,10 @@
   details.subsec>summary{list-style:none;cursor:pointer;display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:12px 2px;font-size:12px;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;font-weight:600;}
   details.subsec>summary::-webkit-details-marker{display:none;}
   details.subsec>summary .chev{font-size:12px;margin-left:0;}
+  [data-anexos]{border:2px dashed transparent;border-radius:12px;transition:border-color .15s,background .15s;}
+  [data-anexos].arrastando{border-color:var(--gold);background:rgba(212,175,55,.08);}
+  .drop-dica{align-self:center;font-size:12px;color:var(--cream-dim);}
+  @media (hover:none){.drop-dica{display:none;}}
   .subsec-qtd{font-size:11px;color:var(--cream-dim);text-transform:none;letter-spacing:0;font-weight:400;}
   .subsec-corpo{margin-top:0;padding-bottom:6px;}
   .item-actions{display:flex;justify-content:flex-end;margin-top:12px;}
@@ -810,6 +814,7 @@ window.FIREBASE_CONFIG={
       '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+
       '<button type="button" class="btn-secondary small" data-addanexo="'+secao+'">📎 Anexar arquivo</button>'+
       '<button type="button" class="btn-secondary small" data-addfoto="'+secao+'">📷 Tirar foto</button>'+
+      '<span class="drop-dica">⬇ ou arraste arquivos aqui</span>'+
       '</div>'+
       '<input type="file" multiple style="display:none" data-fileinput="'+secao+'">'+
       '<input type="file" accept="image/*" capture="environment" style="display:none" data-fotoinput="'+secao+'"></div>';
@@ -1177,6 +1182,20 @@ window.FIREBASE_CONFIG={
       };
       input.addEventListener('change',trata(input));
       if(fotoInput)fotoInput.addEventListener('change',trata(fotoInput));
+      // arrastar e soltar arquivos na área de anexos
+      const zona=btn.closest('[data-anexos]');
+      if(zona){
+        let nivel=0;
+        const temArquivo=e=>[...(e.dataTransfer&&e.dataTransfer.types||[])].includes('Files');
+        zona.addEventListener('dragenter',e=>{if(!temArquivo(e))return;e.preventDefault();nivel++;zona.classList.add('arrastando');});
+        zona.addEventListener('dragover',e=>{if(!temArquivo(e))return;e.preventDefault();e.dataTransfer.dropEffect='copy';});
+        zona.addEventListener('dragleave',()=>{nivel=Math.max(0,nivel-1);if(!nivel)zona.classList.remove('arrastando');});
+        zona.addEventListener('drop',async e=>{
+          if(!temArquivo(e))return;e.preventDefault();nivel=0;zona.classList.remove('arrastando');
+          if(!db){alert('Este navegador não suporta armazenamento de arquivos.');return;}
+          if(e.dataTransfer.files&&e.dataTransfer.files.length)await adicionarArquivos(e.dataTransfer.files,obj,secao,card);
+        });
+      }
       renderAnexos(card,obj,secao);
     });
   }
