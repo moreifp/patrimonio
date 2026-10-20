@@ -574,24 +574,49 @@ window.FIREBASE_CONFIG={
       document.head.appendChild(s);
     });
   }
+  // pré-carrega o leitor de Word alguns segundos depois de abrir o app, para o primeiro "abrir" ser imediato
+  setTimeout(()=>{carregarMammoth().catch(()=>{});},5000);
+  // Leitor de Word dentro do próprio app (tela cheia). Converter numa aba nova deixava o app
+  // em segundo plano e o Chrome desacelerava a conversão (≈40 s).
+  function leitorWord(nome){
+    let ov=document.getElementById('leitorWord');
+    if(!ov){
+      ov=document.createElement('div');ov.id='leitorWord';
+      ov.style.cssText='position:fixed;inset:0;z-index:99999;background:#fff;color:#222;display:flex;flex-direction:column';
+      ov.innerHTML='<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;padding-top:max(10px,env(safe-area-inset-top));border-bottom:1px solid #e5e5e5;background:#f7f7f5">'+
+        '<button type="button" data-fechar aria-label="Fechar" style="font-size:22px;line-height:1;min-width:52px;height:52px;border-radius:12px;border:1px solid #ccc;background:#fff;color:#222;cursor:pointer">✕</button>'+
+        '<div data-titulo style="font:600 16px -apple-system,Segoe UI,Arial,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div></div>'+
+        '<div data-corpo style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch"></div>'+
+        '<style>#leitorWord [data-corpo]>div{font-family:-apple-system,"Segoe UI",Arial,sans-serif;max-width:820px;margin:0 auto;padding:20px 16px 80px;line-height:1.55;font-size:17px;color:#222}'+
+        '#leitorWord h1{font-size:1.5em;margin:.2em 0 .6em}#leitorWord h2{font-size:1.25em;margin-top:1.6em}#leitorWord h3{font-size:1.1em;margin-top:1.4em}'+
+        '#leitorWord table{border-collapse:collapse;width:100%;font-size:.9em;margin:12px 0;display:block;overflow-x:auto}#leitorWord td,#leitorWord th{border:1px solid #ccc;padding:6px 8px;vertical-align:top}#leitorWord em{color:#666}</style>';
+      const fechar=()=>{ov.style.display='none';ov.querySelector('[data-corpo]').innerHTML='';};
+      ov.querySelector('[data-fechar]').addEventListener('click',fechar);
+      document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ov.style.display!=='none')fechar();});
+      document.body.appendChild(ov);
+    }
+    ov.style.display='flex';
+    ov.querySelector('[data-titulo]').textContent=nome;
+    ov.querySelector('[data-corpo]').innerHTML='<div><p style="color:#777">Abrindo…</p></div>';
+    return ov.querySelector('[data-corpo]');
+  }
   async function abrirAnexo(ax){
+    const ext=(String(ax.nome||'').split('.').pop()||'').toLowerCase();
+    if(ext==='docx'){
+      const corpo=leitorWord(ax.nome);
+      try{
+        const [blob]=await Promise.all([lerArquivo(ax.id),carregarMammoth()]);
+        if(!blob){corpo.innerHTML='<div><p>Arquivo não encontrado neste aparelho.</p></div>';return;}
+        const r=await window.mammoth.convertToHtml({arrayBuffer:await blob.arrayBuffer()});
+        corpo.innerHTML='<div>'+r.value+'</div>';corpo.scrollTop=0;
+      }catch(e){corpo.innerHTML='<div><p>Não foi possível abrir: '+esc(e.message)+'</p></div>';}
+      return;
+    }
     const w=window.open('','_blank');
     if(w){w.document.title=ax.nome;w.document.body.innerHTML='<p style="font-family:-apple-system,Arial,sans-serif;padding:24px;color:#555">Abrindo '+esc(ax.nome)+'…</p>';}
     const blob=await lerArquivo(ax.id);
     if(!blob){if(w)w.close();alert('Arquivo não encontrado neste aparelho.');return;}
-    const ext=(String(ax.nome||'').split('.').pop()||'').toLowerCase();
     try{
-      if(ext==='docx'){
-        await carregarMammoth();
-        const r=await window.mammoth.convertToHtml({arrayBuffer:await blob.arrayBuffer()});
-        const html='<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(ax.nome)+'</title>'+
-          '<style>body{font-family:-apple-system,"Segoe UI",Arial,sans-serif;max-width:820px;margin:0 auto;padding:24px 16px 64px;line-height:1.55;color:#222;background:#fff;font-size:17px}'+
-          'h1{font-size:1.5em}h2{font-size:1.25em;margin-top:1.6em}h3{font-size:1.1em;margin-top:1.4em}'+
-          'table{border-collapse:collapse;width:100%;font-size:.9em;margin:12px 0;display:block;overflow-x:auto}td,th{border:1px solid #ccc;padding:6px 8px;vertical-align:top}em{color:#666}</style></head><body>'+r.value+'</body></html>';
-        if(w){w.document.open();w.document.write(html);w.document.close();}
-        else{location.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));}
-        return;
-      }
       const tipo=TIPOS_ANEXO[ext]||blob.type||'application/octet-stream';
       const url=URL.createObjectURL(blob.type===tipo?blob:new Blob([blob],{type:tipo}));
       if(w)w.location.href=url;
