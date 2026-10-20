@@ -563,6 +563,43 @@ window.FIREBASE_CONFIG={
         arqRef(id).put(blob).then(()=>{pendentes.delete(id);salvarPendentes();}).catch(()=>{});
     }
   }
+  // ---------- abrir anexo (PDF/imagem no navegador; Word convertido para leitura) ----------
+  const TIPOS_ANEXO={pdf:'application/pdf',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',heic:'image/heic',txt:'text/plain'};
+  function carregarMammoth(){
+    if(window.mammoth)return Promise.resolve();
+    return new Promise((ok,erro)=>{
+      const s=document.createElement('script');
+      s.src='https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js';
+      s.onload=ok;s.onerror=()=>erro(new Error('não consegui carregar o leitor de Word'));
+      document.head.appendChild(s);
+    });
+  }
+  async function abrirAnexo(ax){
+    const w=window.open('','_blank');
+    if(w){w.document.title=ax.nome;w.document.body.innerHTML='<p style="font-family:-apple-system,Arial,sans-serif;padding:24px;color:#555">Abrindo '+esc(ax.nome)+'…</p>';}
+    const blob=await lerArquivo(ax.id);
+    if(!blob){if(w)w.close();alert('Arquivo não encontrado neste aparelho.');return;}
+    const ext=(String(ax.nome||'').split('.').pop()||'').toLowerCase();
+    try{
+      if(ext==='docx'){
+        await carregarMammoth();
+        const r=await window.mammoth.convertToHtml({arrayBuffer:await blob.arrayBuffer()});
+        const html='<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(ax.nome)+'</title>'+
+          '<style>body{font-family:-apple-system,"Segoe UI",Arial,sans-serif;max-width:820px;margin:0 auto;padding:24px 16px 64px;line-height:1.55;color:#222;background:#fff;font-size:17px}'+
+          'h1{font-size:1.5em}h2{font-size:1.25em;margin-top:1.6em}h3{font-size:1.1em;margin-top:1.4em}'+
+          'table{border-collapse:collapse;width:100%;font-size:.9em;margin:12px 0;display:block;overflow-x:auto}td,th{border:1px solid #ccc;padding:6px 8px;vertical-align:top}em{color:#666}</style></head><body>'+r.value+'</body></html>';
+        if(w){w.document.open();w.document.write(html);w.document.close();}
+        else{location.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));}
+        return;
+      }
+      const tipo=TIPOS_ANEXO[ext]||blob.type||'application/octet-stream';
+      const url=URL.createObjectURL(blob.type===tipo?blob:new Blob([blob],{type:tipo}));
+      if(w)w.location.href=url;
+      else{const a=document.createElement('a');a.href=url;a.download=ax.nome;a.click();}
+      setTimeout(()=>URL.revokeObjectURL(url),120000);
+    }catch(e){if(w)w.close();alert('Não foi possível abrir: '+e.message);}
+  }
+
   async function lerArquivo(id){
     const local=await idbGet('arquivos',id);
     if(local)return local;
@@ -1091,17 +1128,7 @@ window.FIREBASE_CONFIG={
         if(blob){row.querySelector('.anexo-thumb').src=URL.createObjectURL(blob);}
       });
     }
-    row.querySelector('[data-abrir]').addEventListener('click',async()=>{
-      const blob=await lerArquivo(ax.id);
-      if(!blob){alert('Arquivo não encontrado neste aparelho.');return;}
-      const url=URL.createObjectURL(blob);
-      const w=window.open(url,'_blank');
-      if(!w){
-        const a=document.createElement('a');
-        a.href=url;a.download=ax.nome;a.click();
-      }
-      setTimeout(()=>URL.revokeObjectURL(url),120000);
-    });
+    row.querySelector('[data-abrir]').addEventListener('click',()=>abrirAnexo(ax));
     row.querySelector('[data-apagar]').addEventListener('click',async()=>{
       if(!confirm('Remover o arquivo "'+ax.nome+'"?'))return;
       await apagarArquivo(ax.id);
