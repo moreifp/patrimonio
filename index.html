@@ -606,7 +606,7 @@ window.FIREBASE_CONFIG={
     });
   }
   // ---------- aviso de nova versão do app ----------
-  const APP_VERSAO='2026-10-20f';
+  const APP_VERSAO='2026-10-20g';
   let avisoVersao=false;
   async function checarVersao(){
     if(avisoVersao)return;
@@ -980,7 +980,7 @@ window.FIREBASE_CONFIG={
       '<summary>'+
         '<span class="item-title"><span class="item-dot" style="background:'+(FIN_CORES[fc.tipo]||'#7fb0c9')+'"></span>'+
           '<span><span class="item-name">'+esc(fc.nome||'Conta')+'</span>'+
-          '<div class="item-sub">'+(bloqueado?'🔒 protegido por senha':tipoNome+(nExtratos?' · '+nExtratos+' extrato'+(nExtratos>1?'s':''):'')+' · atualizado '+fmtDate(fc.atualizado))+'</div>'+
+          '<div class="item-sub">'+(bloqueado?'🔒 protegido por senha':tipoNome+(nExtratos?' · '+nExtratos+' extrato'+(nExtratos>1?'s':''):'')+' · atualizado '+fmtDate(fc.dataExtrato||fc.atualizado))+'</div>'+
         '</span></span>'+
         '<span style="display:flex;align-items:center;gap:2px;"><span class="item-value">'+(bloqueado?'••••':fmtMoeda(fc.valor||0,fc.moeda))+'</span>'+
         '<button type="button" class="lock-btn" data-lock title="proteger com senha">'+(fc.senhaHash?'🔒':'🔓')+'</button>'+
@@ -1188,7 +1188,7 @@ window.FIREBASE_CONFIG={
     } else if(tipo==='fin'){
       const tipoNome=(FIN_TIPOS.find(t=>t.id===obj.tipo)||FIN_TIPOS[0]).nome;
       const n=(obj.extratos||[]).length;
-      subEl.textContent=tipoNome+(n?' · '+n+' extrato'+(n>1?'s':''):'')+' · atualizado '+fmtDate(obj.atualizado);
+      subEl.textContent=tipoNome+(n?' · '+n+' extrato'+(n>1?'s':''):'')+' · atualizado '+fmtDate(obj.dataExtrato||obj.atualizado);
       card.querySelector('.item-dot').style.background=FIN_CORES[obj.tipo]||'#7fb0c9';
     } else {
       subEl.textContent=obj.categoria||'';
@@ -1697,7 +1697,8 @@ window.FIREBASE_CONFIG={
           if(v>0){fc.valor=Math.round(v*100)/100;fc.moeda=docs[0].moeda||fc.moeda||'BRL';}
         }
         fc.atualizado=hoje();
-        feitos.push(m.nome+' · '+mes+(m.referencia?' (referência, valor não somado)':' · '+fmtMoeda(fc.valor||0,fc.moeda)));
+        fc.dataExtrato=docs.map(d=>String(d.dataPosicao||'').slice(0,10)).sort().pop()||fc.dataExtrato;
+        feitos.push(m.nome+' · extrato de '+fmtDate(fc.dataExtrato)+(m.referencia?' (referência, valor não somado)':' · '+fmtMoeda(fc.valor||0,fc.moeda)));
       }
       snapshot();renderAll();
       alert('BTG-Wealth\n\n'+(feitos.length?'Atualizado:\n• '+feitos.join('\n• '):'Nada atualizado.')+(avisos.length?'\n\nAtenção:\n• '+avisos.join('\n• '):''));
