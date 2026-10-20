@@ -268,7 +268,7 @@
   <details class="panel sec" id="secFin" open>
     <summary class="panel-head">
       <h2 class="h-fin"><span class="chev3">▶</span>Financeiro <span class="tag" id="finCount"></span></h2>
-      <button class="btn-fin small" id="addFinBtn">+ Conta</button>
+      <span style="display:flex;gap:6px;"><button class="btn-fin small" id="btgBtn" title="Buscar o último extrato de cada conta no BTG-Wealth">🔄 BTG</button><button class="btn-fin small" id="addFinBtn">+ Conta</button></span>
     </summary>
     <div id="finList"></div>
     <div class="empty-hint" id="finEmpty">Nenhuma conta cadastrada. Toque em “+ Conta”.</div>
@@ -606,7 +606,7 @@ window.FIREBASE_CONFIG={
     });
   }
   // ---------- aviso de nova versão do app ----------
-  const APP_VERSAO='2026-10-20e';
+  const APP_VERSAO='2026-10-20f';
   let avisoVersao=false;
   async function checarVersao(){
     if(avisoVersao)return;
@@ -1622,6 +1622,88 @@ window.FIREBASE_CONFIG={
     fin.unshift(fc);aberto.add(fc.id);save();renderAll();
     const campo=els.finList.querySelector('details[data-id="'+fc.id+'"] input[data-k="nome"]');
     if(campo)campo.focus();
+  });
+  // ---------- buscar extratos no BTG-Wealth (um botão para todas as contas) ----------
+  // Usa a API do BTG-Wealth (btg-wealth.web.app) com o login Google do próprio usuário
+  // num 2º app Firebase. Traz o último extrato de cada conta, troca os meses antigos
+  // pelo novo e atualiza o saldo. "Consolidado" é só referência: não mexe no valor.
+  const BTG_CFG={apiKey:"AIzaSyCHyH2OzVSaqGDp83ghX5ZQn9Q0ioW_INo",authDomain:"btg-wealth.web.app",projectId:"btg-wealth",storageBucket:"btg-wealth.firebasestorage.app",messagingSenderId:"268070926843",appId:"1:268070926843:web:bf7f1759bf50a42684b35e"};
+  const BTG_API='https://btg-wealth.web.app/api';
+  const BTG_MAPA=[
+    {fontes:['cons'],nome:'Consolidado Internacional (consultor)',referencia:true,re:/eastcourt|consolidado/i},
+    {fontes:['ubp1'],nome:'UBP Eastcourt Advisory',re:/ubp.*advis|^ubp$/i},
+    {fontes:['ubp2'],nome:'UBP Eastcourt SUB',re:/ubp.*sub/i},
+    {fontes:['san'],nome:'Santander PB Eastcourt',re:/santander/i},
+    {fontes:['btg'],nome:'BTG · Margaux FIF',re:/margaux|previd/i},
+    {fontes:['brad'],nome:'Bradesco Private',re:/bradesco (private|contas)/i}
+  ];
+  let btgApp=null;
+  function btgAuth(){
+    if(!window.firebase)return null;
+    if(!btgApp){try{btgApp=firebase.app('btg');}catch(e){btgApp=firebase.initializeApp(BTG_CFG,'btg');}}
+    return btgApp.auth();
+  }
+  setTimeout(()=>{try{btgAuth();}catch(e){}},3000); // restaura a sessão do BTG antes do clique
+  async function btgGet(user,path){
+    const r=await fetch(BTG_API+path,{headers:{Authorization:'Bearer '+await user.getIdToken()}});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.error||j.erro||('BTG respondeu '+r.status));
+    return j;
+  }
+  function b64Blob(b64,tipo){const bin=atob(b64);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new Blob([u],{type:tipo});}
+  $('btgBtn').addEventListener('click',async e=>{
+    e.preventDefault();e.stopPropagation();
+    const btn=$('btgBtn');
+    const auth=btgAuth();
+    if(!auth){alert('Sem conexão com a nuvem.');return;}
+    let user=auth.currentUser;
+    try{
+      if(!user){
+        const prov=new firebase.auth.GoogleAuthProvider();
+        prov.setCustomParameters({login_hint:(fbUser&&fbUser.email)||''});
+        user=(await auth.signInWithPopup(prov)).user;
+      }
+    }catch(err){alert('Não foi possível entrar no BTG-Wealth: '+err.message);return;}
+    btn.disabled=true;const txt=btn.textContent;btn.textContent='Buscando…';
+    const feitos=[],avisos=[];
+    try{
+      const [trk,mgx]=await Promise.all([btgGet(user,'/tracking/data'),btgGet(user,'/margaux/data')]);
+      const ultimo=f=>f==='btg'?(mgx.mensalLatest||null):((trk.accounts&&trk.accounts[f]&&trk.accounts[f].latest)||null);
+      for(const m of BTG_MAPA){
+        let fc=fin.find(x=>x.btgFonte===m.fontes.join('+'))||fin.find(x=>!x.btgFonte&&m.re.test(x.nome||''));
+        if(!fc){avisos.push(m.nome+': conta não encontrada no Patrimônio');continue;}
+        fc.btgFonte=m.fontes.join('+');
+        const docs=m.fontes.map(ultimo);
+        if(docs.some(d=>!d)){avisos.push(m.nome+': sem extrato no BTG');continue;}
+        const mes=docs.map(d=>String(d.dataPosicao||'').slice(0,7)).sort().pop();
+        const novos=[];
+        for(let i=0;i<m.fontes.length;i++){
+          const f=m.fontes[i],d=docs[i];
+          if(d.manual)continue; // Bradesco Private: só saldo digitado, sem PDF
+          const nome=(d.filename||(f+'_'+d.dataPosicao+'.pdf'));
+          const ja=(fc.extratos||[]).some(ex=>ex.mes===mes&&ex.anexos.some(a=>a.nome===nome));
+          if(ja){novos.push(null);continue;}
+          const q=f==='btg'?'/margaux/data?date=mensal_'+String(d.dataPosicao).slice(0,7)+'&pdf=1':'/tracking/data?account='+f+'&date='+d.dataPosicao+'&pdf=1';
+          try{const j=await btgGet(user,q);const blob=b64Blob(j.pdfBase64,'application/pdf');const id=uid('x');await salvarArquivo(id,blob);novos.push({id,nome:j.filename||nome,tipo:'application/pdf',tam:blob.size});}
+          catch(err){avisos.push(m.nome+': PDF não veio ('+err.message+')');}
+        }
+        const baixou=novos.filter(Boolean);
+        if(baixou.length){
+          for(const ex of (fc.extratos||[]))for(const a of ex.anexos)await apagarArquivo(a.id);
+          fc.extratos=[{mes,anexos:baixou}];
+        }
+        if(!m.referencia){
+          const v=docs.reduce((s,d)=>s+(Number(d.nav)||0),0);
+          if(v>0){fc.valor=Math.round(v*100)/100;fc.moeda=docs[0].moeda||fc.moeda||'BRL';}
+        }
+        fc.atualizado=hoje();
+        feitos.push(m.nome+' · '+mes+(m.referencia?' (referência, valor não somado)':' · '+fmtMoeda(fc.valor||0,fc.moeda)));
+      }
+      snapshot();renderAll();
+      alert('BTG-Wealth\n\n'+(feitos.length?'Atualizado:\n• '+feitos.join('\n• '):'Nada atualizado.')+(avisos.length?'\n\nAtenção:\n• '+avisos.join('\n• '):''));
+    }catch(err){
+      alert('Não foi possível buscar no BTG-Wealth: '+err.message+(/fetch/i.test(err.message)?'\n\n(O BTG-Wealth ainda não libera o acesso do Patrimônio — falta publicar a atualização dele.)':''));
+    }finally{btn.disabled=false;btn.textContent=txt;}
   });
   $('addOutroBtn').addEventListener('click',e=>{
     e.preventDefault();
