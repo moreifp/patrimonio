@@ -128,7 +128,17 @@
   }
   .lock-box input:focus{outline:none;border-color:var(--gold-dim);}
   .lock-box button{width:100%;}
-  details[open] .chev{transform:rotate(90deg);}
+  details[open]>summary .chev{transform:rotate(90deg);}
+  details.grupo{border:1px solid var(--gold-dim);border-radius:14px;margin-bottom:12px;background:var(--card-2);overflow:hidden;}
+  details.grupo>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 14px;cursor:pointer;}
+  details.grupo>summary::-webkit-details-marker{display:none;}
+  details.grupo>summary .g-nome{font-weight:700;font-size:16px;}
+  details.grupo>summary .g-sub{font-size:12px;color:var(--cream-dim);margin-top:2px;}
+  details.grupo>.g-corpo{padding:4px 10px 2px;border-top:1px solid var(--line);}
+  details.grupo>summary .chev{font-size:14px;}
+  details.item summary .item-title{flex:1;min-width:0;}
+  details.item summary .item-title>span:last-child{min-width:0;overflow:hidden;}
+  details.item summary .item-value{white-space:nowrap;}
 
   .item-body{padding:4px 14px 14px;border-top:1px solid var(--line);}
   .fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
@@ -337,6 +347,7 @@ window.FIREBASE_CONFIG={
 
   let imoveis=[], veic=[], fin=[], outros=[], hist=[];
   const aberto=new Set();
+  const gruposAbertos=new Set();
   const desbloqueados=new Set(); // itens com senha já liberados nesta sessão
 
   async function hashSenha(senha,sal){
@@ -820,6 +831,7 @@ window.FIREBASE_CONFIG={
       '</summary>'+
       '<div class="item-body"><div class="fields">'+
         f('text','nome','Nome do imóvel',im.nome)+
+        f('text','grupo','Grupo (pasta)',im.grupo)+
         f('valor','valor','Valor estimado',fmtNum(im.valor||0))+
         seletorMoeda(im)+
         f('text','localizacao','Localização / endereço',im.localizacao,'wide')+
@@ -1037,6 +1049,7 @@ window.FIREBASE_CONFIG={
           obj.moeda=el.value;mudouValor=true;
         } else obj[k]=el.value;
         obj.atualizado=hoje();
+        if(k==='grupo'&&tipo==='imovel'){save();renderImoveis();return;}
         if(mudouValor){snapshot();}else save();
         atualizarResumo(card,obj,tipo);
         renderTotal();renderDonut();renderLine();
@@ -1264,13 +1277,43 @@ window.FIREBASE_CONFIG={
   // ---------- listas ----------
   function renderImoveis(){
     els.imoveisList.innerHTML='';
-    const vis=[...imoveis].filter(i=>combina([i.nome,i.localizacao,i.inquilino,i.proprietario,i.registro]))
+    const vis=[...imoveis].filter(i=>combina([i.nome,i.localizacao,i.inquilino,i.proprietario,i.registro,i.grupo]))
       .sort((a,b)=>(b.valor||0)-(a.valor||0));
     els.imoveisEmpty.style.display=vis.length?'none':'block';
     if(imoveis.length&&!vis.length)els.imoveisEmpty.textContent='Nenhum imóvel corresponde à busca.';
     else els.imoveisEmpty.textContent='Nenhum imóvel cadastrado. Toque em “+ Imóvel”.';
     els.imoveisCount.textContent=imoveis.length?imoveis.length+(imoveis.length===1?' imóvel':' imóveis'):'';
-    vis.forEach(im=>els.imoveisList.appendChild(imovelCard(im)));
+    // imóveis com "grupo" ficam juntos numa pasta com setinha (fechada por padrão)
+    const grupos=new Map();const blocos=[];
+    vis.forEach(im=>{
+      const g=String(im.grupo||'').trim();
+      if(!g){blocos.push({valor:im.valor||0,el:()=>imovelCard(im)});return;}
+      if(!grupos.has(g)){const gr={nome:g,itens:[]};grupos.set(g,gr);blocos.push({gr});}
+      grupos.get(g).itens.push(im);
+    });
+    blocos.forEach(b=>{if(b.gr){const it=b.gr.itens;b.valor=it.reduce((s,x)=>s+(x.valor||0),0);b.moedas=new Set(it.map(x=>x.moeda||'BRL'));}});
+    blocos.sort((a,b)=>b.valor-a.valor);
+    blocos.forEach(b=>{
+      if(!b.gr){els.imoveisList.appendChild(b.el());return;}
+      const g=b.gr,det=document.createElement('details');
+      det.className='grupo';
+      if(gruposAbertos.has(g.nome)||filtro)det.open=true;
+      const tot=b.moedas.size===1?fmtMoeda(b.valor,[...b.moedas][0]):'';
+      det.innerHTML='<summary><span><div class="g-nome">📁 '+esc(g.nome)+'</div><div class="g-sub">'+g.itens.length+(g.itens.length===1?' imóvel':' imóveis')+'</div></span>'+
+        '<span style="display:flex;align-items:center;gap:6px"><span class="item-value">'+tot+'</span><span class="chev">▶</span></span></summary><div class="g-corpo"></div>';
+      det.addEventListener('toggle',()=>{if(det.open)gruposAbertos.add(g.nome);else gruposAbertos.delete(g.nome);});
+      const corpo=det.querySelector('.g-corpo');
+      g.itens.sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR',{numeric:true}));
+      // dentro da pasta, tira o começo comum dos nomes (ex.: "Edificio Premium ") para caber na tela
+      let pre=[];
+      if(g.itens.length>1){const ws=g.itens.map(x=>String(x.nome||'').split(/\s+/));pre=ws[0].slice();
+        ws.forEach(w=>{let i=0;while(i<pre.length&&i<w.length-1&&pre[i].toLowerCase()===w[i].toLowerCase())i++;pre=pre.slice(0,i);});
+        if(pre.length>1)pre=pre.slice(0,-1);}
+      g.itens.forEach(im=>{const card=imovelCard(im);
+        if(pre.length){const n=card.querySelector('.item-name');if(n)n.textContent=String(im.nome||'').split(/\s+/).slice(pre.length).join(' ');}
+        corpo.appendChild(card);});
+      els.imoveisList.appendChild(det);
+    });
   }
   function renderVeic(){
     els.veicList.innerHTML='';
