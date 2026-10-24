@@ -205,6 +205,16 @@
     .fields{grid-template-columns:1fr;}
     .total-value{font-size:30px;}
   }
+  /* leitura automática de contrato */
+  .ia-sheet{position:fixed;left:0;right:0;bottom:0;z-index:9000;display:flex;justify-content:center;padding:0 12px max(12px,env(safe-area-inset-bottom));pointer-events:none;}
+  .ia-card{pointer-events:auto;width:100%;max-width:520px;background:var(--card-2,#1f3328);border:1px solid var(--gold-dim);border-radius:18px;padding:16px 16px 14px;box-shadow:0 -8px 30px rgba(0,0,0,.45);}
+  .ia-title{font-family:'Fraunces',serif;font-size:18px;color:var(--gold);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+  .ia-row{display:flex;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--line);font-size:15px;}
+  .ia-row .ic{font-size:24px;width:30px;text-align:center;}
+  .ia-row .muda{color:var(--cream-dim);font-size:12px;}
+  .ia-btns{display:flex;gap:10px;margin-top:12px;}
+  .ia-btns button{flex:1;font-size:17px;padding:14px;border-radius:12px;}
+  .ia-msg{font-size:14px;color:var(--cream-dim);}
 </style>
 </head>
 <body>
@@ -1220,6 +1230,85 @@ window.FIREBASE_CONFIG={
     obj.atualizado=hoje();
     save();
     renderAnexos(card,obj,secao);
+    if(secao==='aluguel'&&('aluguelValor' in obj||card.querySelector('[data-k="aluguelValor"]'))){
+      const doc=Array.from(files).find(f=>/pdf|image\/|wordprocessingml/.test(f.type||'')||/\.(pdf|docx|jpe?g|png|heic)$/i.test(f.name||''));
+      if(doc)lerContratoAluguel(doc,obj);
+    }
+  }
+
+  // ---------- leitura automática do contrato de aluguel (Gemini via Firebase AI Logic) ----------
+  let iaModelo=null;
+  async function modeloIA(){
+    if(iaModelo)return iaModelo;
+    const A=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js');
+    const I=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-ai.js');
+    const app=A.getApps().find(a=>a.name==='ia')||A.initializeApp(CLOUD,'ia');
+    const ai=I.getAI(app,{backend:new I.GoogleAIBackend()});
+    iaModelo=I.getGenerativeModel(ai,{model:'gemini-2.5-flash',generationConfig:{responseMimeType:'application/json',temperature:0}});
+    return iaModelo;
+  }
+  const paraBase64=blob=>new Promise((ok,erro)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]);r.onerror=erro;r.readAsDataURL(blob);});
+  function iaSheet(html){
+    let el=document.getElementById('iaSheet');
+    if(!el){el=document.createElement('div');el.id='iaSheet';el.className='ia-sheet';document.body.appendChild(el);}
+    el.innerHTML='<div class="ia-card">'+html+'</div>';
+    return el;
+  }
+  const iaFechar=()=>{const el=document.getElementById('iaSheet');if(el)el.remove();};
+  const fmtDataBR=d=>d&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d.split('-').reverse().join('/'):'—';
+  async function lerContratoAluguel(file,obj){
+    iaSheet('<div class="ia-title">📄 Lendo o contrato…</div><div class="ia-msg">'+esc(file.name||'')+'</div>');
+    try{
+      const prompt='Você recebe um contrato de locação/aluguel (pode estar em português, espanhol ou inglês). '+
+        'Extraia os dados e responda SÓ com JSON, sem texto fora dele, no formato: '+
+        '{"ehContrato":true,"inquilino":"nome completo do locatário/arrendatario/tenant","aluguelMensal":1234.56,"moeda":"BRL|USD|EUR","inicio":"AAAA-MM-DD","fim":"AAAA-MM-DD",'+
+        '"resumo":"2 a 4 frases em português com: data de assinatura, prazo, dia e forma de pagamento (banco/conta), reajuste, multa por atraso, depósito/caução/fiador, quem paga condomínio, IPTU e contas, carência e opção de compra se houver"}. '+
+        'Use número puro em aluguelMensal (sem símbolo nem separador de milhar). Se o fim não estiver escrito, calcule pelo prazo. '+
+        'Se um campo não existir no documento, use null. Se não for um contrato de locação, responda {"ehContrato":false}.';
+      const tipo=file.type||((/\.pdf$/i.test(file.name))?'application/pdf':'');
+      let partes;
+      if(/wordprocessingml/.test(tipo)||/\.docx$/i.test(file.name||'')){
+        await carregarMammoth();
+        const r=await mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()});
+        partes=[prompt,'TEXTO DO CONTRATO:\n'+r.value.slice(0,200000)];
+      } else {
+        partes=[prompt,{inlineData:{mimeType:tipo||'application/pdf',data:await paraBase64(file)}}];
+      }
+      const m=await modeloIA();
+      const res=await m.generateContent(partes);
+      let txt=res.response.text().trim().replace(/^```(json)?/,'').replace(/```$/,'');
+      const d=JSON.parse(txt);
+      if(!d||d.ehContrato===false){iaSheet('<div class="ia-title">📄 Não parece um contrato de aluguel</div><div class="ia-btns"><button class="btn-secondary" id="iaOk">OK</button></div>');document.getElementById('iaOk').onclick=iaFechar;return;}
+      const moeda=d.moeda||obj.moeda||'BRL';
+      const valor=Number(d.aluguelMensal)||0;
+      const muda=(atual,novo)=>atual&&novo&&String(atual)!==String(novo)?'<div class="muda">antes: '+esc(String(atual))+'</div>':'';
+      const outraMoeda=valor&&obj.moeda&&moeda!==obj.moeda;
+      iaSheet(
+        '<div class="ia-title">📄 Li o contrato</div>'+
+        '<div class="ia-row"><span class="ic">👤</span><div><b>'+esc(d.inquilino||'—')+'</b>'+muda(obj.inquilino,d.inquilino)+'</div></div>'+
+        '<div class="ia-row"><span class="ic">💵</span><div><b>'+(valor?fmtMoeda(valor,moeda)+'/mês':'—')+'</b>'+muda(obj.aluguelValor,valor)+(outraMoeda?'<div class="muda">contrato em '+esc(moeda)+'; o imóvel está em '+esc(obj.moeda)+'</div>':'')+'</div></div>'+
+        '<div class="ia-row"><span class="ic">📅</span><div><b>'+fmtDataBR(d.inicio)+' → '+fmtDataBR(d.fim)+'</b></div></div>'+
+        '<div class="ia-btns"><button class="btn-primary" id="iaSim">✓ Preencher</button><button class="btn-secondary" id="iaNao">✕</button></div>');
+      document.getElementById('iaNao').onclick=iaFechar;
+      document.getElementById('iaSim').onclick=()=>{
+        obj.alugado=true;
+        if(d.inquilino)obj.inquilino=d.inquilino;
+        if(valor)obj.aluguelValor=valor;
+        if(d.inicio)obj.contratoInicio=d.inicio;
+        if(d.fim)obj.contratoFim=d.fim;
+        if(d.resumo){const n='Contrato ('+(file.name||'')+'): '+d.resumo;obj.notas=obj.notas?obj.notas+'\n'+n:n;}
+        obj.atualizado=hoje();
+        save();snapshot();renderAll();
+        iaFechar();
+      };
+    }catch(e){
+      const msg=String(e&&e.message||e);
+      const off=/api-not-enabled|firebasevertexai|ailogic/i.test(msg);
+      iaSheet('<div class="ia-title">📄 Não consegui ler o contrato</div><div class="ia-msg">'+
+        (off?'A leitura automática ainda não está ligada no Firebase.':esc(msg.slice(0,160)))+
+        '</div><div class="ia-btns"><button class="btn-secondary" id="iaOk">OK</button></div>');
+      document.getElementById('iaOk').onclick=iaFechar;
+    }
   }
   function wireAnexos(card,obj){
     card.querySelectorAll('[data-addanexo]').forEach(btn=>{
