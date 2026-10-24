@@ -1244,7 +1244,7 @@ window.FIREBASE_CONFIG={
     const I=await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-ai.js');
     const app=A.getApps().find(a=>a.name==='ia')||A.initializeApp(CLOUD,'ia');
     const ai=I.getAI(app,{backend:new I.GoogleAIBackend()});
-    iaModelo=I.getGenerativeModel(ai,{model:'gemini-2.5-flash',generationConfig:{responseMimeType:'application/json',temperature:0}});
+    iaModelo=I.getGenerativeModel(ai,{model:'gemini-flash-latest',generationConfig:{responseMimeType:'application/json',temperature:0}});
     return iaModelo;
   }
   const paraBase64=blob=>new Promise((ok,erro)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]);r.onerror=erro;r.readAsDataURL(blob);});
@@ -1303,9 +1303,10 @@ window.FIREBASE_CONFIG={
       };
     }catch(e){
       const msg=String(e&&e.message||e);
-      const off=/api-not-enabled|firebasevertexai|ailogic/i.test(msg);
+      const off=/api-not-enabled|ailogic\//i.test(msg);
+      const semCredito=/credits are depleted|quota|429/i.test(msg);
       iaSheet('<div class="ia-title">📄 Não consegui ler o contrato</div><div class="ia-msg">'+
-        (off?'A leitura automática ainda não está ligada no Firebase.':esc(msg.slice(0,160)))+
+        (off?'A leitura automática ainda não está ligada no Firebase.':semCredito?'A leitura automática está sem crédito no Google AI Studio.':esc(msg.slice(0,160)))+
         '</div><div class="ia-btns"><button class="btn-secondary" id="iaOk">OK</button></div>');
       document.getElementById('iaOk').onclick=iaFechar;
     }
