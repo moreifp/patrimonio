@@ -1230,9 +1230,12 @@ window.FIREBASE_CONFIG={
     obj.atualizado=hoje();
     save();
     renderAnexos(card,obj,secao);
-    if(secao==='aluguel'&&('aluguelValor' in obj||card.querySelector('[data-k="aluguelValor"]'))){
-      const doc=Array.from(files).find(f=>/pdf|image\/|wordprocessingml/.test(f.type||'')||/\.(pdf|docx|jpe?g|png|heic)$/i.test(f.name||''));
-      if(doc)lerContratoAluguel(doc,obj);
+    if((secao==='aluguel'||secao==='escritura')&&('aluguelValor' in obj||card.querySelector('[data-k="aluguelValor"]'))){
+      const lista=Array.from(files);
+      const ok=f=>/pdf|image\//.test(f.type||'')||/\.(pdf|jpe?g|png|heic)$/i.test(f.name||'');
+      const word=f=>(/wordprocessingml/.test(f.type||'')||/\.docx$/i.test(f.name||''))&&!/coment/i.test(f.name||'');
+      const doc=lista.find(ok)||lista.find(word);
+      if(doc)lerDocumentoImovel(doc,obj,secao);
     }
   }
 
@@ -1256,47 +1259,83 @@ window.FIREBASE_CONFIG={
   }
   const iaFechar=()=>{const el=document.getElementById('iaSheet');if(el)el.remove();};
   const fmtDataBR=d=>d&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d.split('-').reverse().join('/'):'—';
-  async function lerContratoAluguel(file,obj){
-    iaSheet('<div class="ia-title">📄 Lendo o contrato…</div><div class="ia-msg">'+esc(file.name||'')+'</div>');
+  const PROMPT_IA={
+    aluguel:'Você recebe um contrato de locação/aluguel (pode estar em português, espanhol ou inglês). '+
+      'Extraia os dados e responda SÓ com JSON, sem texto fora dele, no formato: '+
+      '{"ok":true,"inquilino":"nome completo do locatário/arrendatario/tenant","aluguelMensal":1234.56,"moeda":"BRL|USD|EUR","inicio":"AAAA-MM-DD","fim":"AAAA-MM-DD",'+
+      '"resumo":"2 a 4 frases em português com: data de assinatura, prazo, dia e forma de pagamento (banco/conta), reajuste, multa por atraso, depósito/caução/fiador, quem paga condomínio, IPTU e contas, carência e opção de compra se houver"}. '+
+      'Use número puro em aluguelMensal (sem símbolo nem separador de milhar). Se o fim não estiver escrito, calcule pelo prazo. '+
+      'Se um campo não existir no documento, use null. Se não for um contrato de locação, responda {"ok":false}.',
+    escritura:'Você recebe um documento de imóvel: matrícula/certidão do Registro de Imóveis, escritura, carnê ou notificação de IPTU, ou documento equivalente de outro país. '+
+      'Extraia os dados e responda SÓ com JSON, sem texto fora dele, no formato: '+
+      '{"ok":true,"registro":"número da matrícula ou da finca (só o número)","cartorio":"nome do cartório de registro de imóveis","iptuNum":"número do contribuinte/cadastro do IPTU",'+
+      '"proprietario":"dono ATUAL segundo o último ato de transmissão","localizacao":"endereço do imóvel, curto (rua, número, unidade, bairro, cidade)","iptuValor":1234.56,"anoIptu":2026,'+
+      '"resumo":"2 a 4 frases em português: que documento é, data, dono atual e como adquiriu, ônus/hipoteca/usufruto/penhora ativos e qualquer pendência"}. '+
+      'iptuValor é o IPTU total do ano (número puro) e só se o documento for um IPTU; senão null. Se um campo não existir no documento, use null. '+
+      'Se não for documento de imóvel, responda {"ok":false}.'
+  };
+  async function lerDocumentoImovel(file,obj,secao){
+    const nomeDoc=secao==='aluguel'?'o contrato':'o documento';
+    if(file.size>18*1024*1024){
+      iaSheet('<div class="ia-title">📄 Arquivo grande demais para ler</div><div class="ia-msg">Até 18 MB. Este tem '+fmtTam(file.size)+'.</div><div class="ia-btns"><button class="btn-secondary" id="iaOk">OK</button></div>');
+      document.getElementById('iaOk').onclick=iaFechar;return;
+    }
+    iaSheet('<div class="ia-title">📄 Lendo '+nomeDoc+'…</div><div class="ia-msg">'+esc(file.name||'')+'</div>');
     try{
-      const prompt='Você recebe um contrato de locação/aluguel (pode estar em português, espanhol ou inglês). '+
-        'Extraia os dados e responda SÓ com JSON, sem texto fora dele, no formato: '+
-        '{"ehContrato":true,"inquilino":"nome completo do locatário/arrendatario/tenant","aluguelMensal":1234.56,"moeda":"BRL|USD|EUR","inicio":"AAAA-MM-DD","fim":"AAAA-MM-DD",'+
-        '"resumo":"2 a 4 frases em português com: data de assinatura, prazo, dia e forma de pagamento (banco/conta), reajuste, multa por atraso, depósito/caução/fiador, quem paga condomínio, IPTU e contas, carência e opção de compra se houver"}. '+
-        'Use número puro em aluguelMensal (sem símbolo nem separador de milhar). Se o fim não estiver escrito, calcule pelo prazo. '+
-        'Se um campo não existir no documento, use null. Se não for um contrato de locação, responda {"ehContrato":false}.';
+      const prompt=PROMPT_IA[secao];
       const tipo=file.type||((/\.pdf$/i.test(file.name))?'application/pdf':'');
       let partes;
       if(/wordprocessingml/.test(tipo)||/\.docx$/i.test(file.name||'')){
         await carregarMammoth();
         const r=await mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()});
-        partes=[prompt,'TEXTO DO CONTRATO:\n'+r.value.slice(0,200000)];
+        partes=[prompt,'TEXTO DO DOCUMENTO:\n'+r.value.slice(0,200000)];
       } else {
         partes=[prompt,{inlineData:{mimeType:tipo||'application/pdf',data:await paraBase64(file)}}];
       }
       const m=await modeloIA();
       const res=await m.generateContent(partes);
-      let txt=res.response.text().trim().replace(/^```(json)?/,'').replace(/```$/,'');
-      const d=JSON.parse(txt);
-      if(!d||d.ehContrato===false){iaSheet('<div class="ia-title">📄 Não parece um contrato de aluguel</div><div class="ia-btns"><button class="btn-secondary" id="iaOk">OK</button></div>');document.getElementById('iaOk').onclick=iaFechar;return;}
-      const moeda=d.moeda||obj.moeda||'BRL';
-      const valor=Number(d.aluguelMensal)||0;
+      const d=JSON.parse(res.response.text().trim().replace(/^```(json)?/,'').replace(/```$/,''));
+      if(!d||d.ok===false||d.ehContrato===false){
+        iaSheet('<div class="ia-title">📄 Não reconheci '+nomeDoc+'</div><div class="ia-btns"><button class="btn-secondary" id="iaOk">OK</button></div>');
+        document.getElementById('iaOk').onclick=iaFechar;return;
+      }
       const muda=(atual,novo)=>atual&&novo&&String(atual)!==String(novo)?'<div class="muda">antes: '+esc(String(atual))+'</div>':'';
-      const outraMoeda=valor&&obj.moeda&&moeda!==obj.moeda;
-      iaSheet(
-        '<div class="ia-title">📄 Li o contrato</div>'+
-        '<div class="ia-row"><span class="ic">👤</span><div><b>'+esc(d.inquilino||'—')+'</b>'+muda(obj.inquilino,d.inquilino)+'</div></div>'+
-        '<div class="ia-row"><span class="ic">💵</span><div><b>'+(valor?fmtMoeda(valor,moeda)+'/mês':'—')+'</b>'+muda(obj.aluguelValor,valor)+(outraMoeda?'<div class="muda">contrato em '+esc(moeda)+'; o imóvel está em '+esc(obj.moeda)+'</div>':'')+'</div></div>'+
-        '<div class="ia-row"><span class="ic">📅</span><div><b>'+fmtDataBR(d.inicio)+' → '+fmtDataBR(d.fim)+'</b></div></div>'+
+      const linha=(ic,txt,antes)=>'<div class="ia-row"><span class="ic">'+ic+'</span><div><b>'+txt+'</b>'+(antes||'')+'</div></div>';
+      let linhas='',aplicar;
+      if(secao==='aluguel'){
+        const moeda=d.moeda||obj.moeda||'BRL';
+        const valor=Number(d.aluguelMensal)||0;
+        const outraMoeda=valor&&obj.moeda&&moeda!==obj.moeda;
+        linhas=linha('👤',esc(d.inquilino||'—'),muda(obj.inquilino,d.inquilino))+
+          linha('💵',valor?fmtMoeda(valor,moeda)+'/mês':'—',muda(obj.aluguelValor,valor)+(outraMoeda?'<div class="muda">contrato em '+esc(moeda)+'; o imóvel está em '+esc(obj.moeda)+'</div>':''))+
+          linha('📅',fmtDataBR(d.inicio)+' → '+fmtDataBR(d.fim));
+        aplicar=()=>{
+          obj.alugado=true;
+          if(d.inquilino)obj.inquilino=d.inquilino;
+          if(valor)obj.aluguelValor=valor;
+          if(d.inicio)obj.contratoInicio=d.inicio;
+          if(d.fim)obj.contratoFim=d.fim;
+        };
+      } else {
+        const anoAtual=new Date().getFullYear();
+        const iptuV=(Number(d.anoIptu)||0)>=anoAtual-1?(Number(d.iptuValor)||0):0; // IPTU antigo não substitui o atual
+        if(d.registro)linhas+=linha('📜','Matrícula '+esc(d.registro),muda(obj.registro,d.registro));
+        if(d.cartorio)linhas+=linha('🏛️',esc(d.cartorio),muda(obj.cartorio,d.cartorio));
+        if(d.iptuNum)linhas+=linha('🧾','IPTU '+esc(d.iptuNum)+(Number(d.iptuValor)?' · '+fmtMoeda(Number(d.iptuValor),'BRL')+(d.anoIptu?' ('+esc(String(d.anoIptu))+')':''):''),muda(obj.iptuNum,d.iptuNum));
+        if(d.proprietario)linhas+=linha('👤',esc(d.proprietario),muda(obj.proprietario,d.proprietario));
+        if(d.localizacao)linhas+=linha('📍',esc(d.localizacao),muda(obj.localizacao,d.localizacao));
+        if(!linhas)linhas='<div class="ia-msg">Não achei matrícula, cartório, IPTU, dono ou endereço neste arquivo.</div>';
+        aplicar=()=>{
+          for(const k of ['registro','cartorio','iptuNum','proprietario','localizacao'])if(d[k])obj[k]=d[k];
+          if(iptuV)obj.iptuValor=iptuV;
+        };
+      }
+      iaSheet('<div class="ia-title">📄 Li '+nomeDoc+'</div>'+linhas+
         '<div class="ia-btns"><button class="btn-primary" id="iaSim">✓ Preencher</button><button class="btn-secondary" id="iaNao">✕</button></div>');
       document.getElementById('iaNao').onclick=iaFechar;
       document.getElementById('iaSim').onclick=()=>{
-        obj.alugado=true;
-        if(d.inquilino)obj.inquilino=d.inquilino;
-        if(valor)obj.aluguelValor=valor;
-        if(d.inicio)obj.contratoInicio=d.inicio;
-        if(d.fim)obj.contratoFim=d.fim;
-        if(d.resumo){const n='Contrato ('+(file.name||'')+'): '+d.resumo;obj.notas=obj.notas?obj.notas+'\n'+n:n;}
+        aplicar();
+        if(d.resumo){const n=(secao==='aluguel'?'Contrato':'Documento')+' ('+(file.name||'')+'): '+d.resumo;obj.notas=obj.notas?obj.notas+'\n'+n:n;}
         obj.atualizado=hoje();
         save();snapshot();renderAll();
         iaFechar();
@@ -1305,7 +1344,7 @@ window.FIREBASE_CONFIG={
       const msg=String(e&&e.message||e);
       const off=/api-not-enabled|ailogic\//i.test(msg);
       const semCredito=/credits are depleted|quota|429/i.test(msg);
-      iaSheet('<div class="ia-title">📄 Não consegui ler o contrato</div><div class="ia-msg">'+
+      iaSheet('<div class="ia-title">📄 Não consegui ler '+nomeDoc+'</div><div class="ia-msg">'+
         (off?'A leitura automática ainda não está ligada no Firebase.':semCredito?'A leitura automática está sem crédito no Google AI Studio.':esc(msg.slice(0,160)))+
         '</div><div class="ia-btns"><button class="btn-secondary" id="iaOk">OK</button></div>');
       document.getElementById('iaOk').onclick=iaFechar;
